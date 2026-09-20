@@ -1,0 +1,98 @@
+  /* Modal */
+   .modal-overlay { position:fixed; inset:0; padding:16px; background:var(--overlay); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; z-index:100; overflow:auto; }
+  .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow-lg); padding:17.6px; width:336px; max-width:90vw; }
+  .modal-box h3 { font-size:var(--fs-md); font-weight:600; margin-bottom:14px; color:var(--text-title); }
+  .modal-box textarea { width:100%; background:var(--surface-2); border:1px solid var(--border2); border-radius:var(--radius); padding:11px; color:var(--text); font-family:var(--font); font-size:var(--fs-base); line-height:1.55; outline:none; resize:vertical; min-height:120px; transition:border-color var(--t), box-shadow var(--t); }
+  .modal-box textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+
+  .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+  .modal-actions button { padding:9px 17px; border-radius:var(--radius); font-size:var(--fs-base); font-weight:600; cursor:pointer; border:1px solid var(--border2); background:transparent; color:var(--text); transition:color var(--t), border-color var(--t), background var(--t); }
+  .modal-actions button:hover { border-color:var(--border2); background:var(--surface-2); }
+  .modal-actions .btn-primary { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .modal-actions .btn-primary:hover { background:var(--primary-hover); border-color:var(--primary-hover); }
+   .modal-box-lists {
+     width:900px; max-width:94vw;
+     /* Hauteur MAXIMALE fixe : quel que soit le contenu (nombre de valeurs
+        dans chaque liste), la boîte ne dépasse jamais 85% de la hauteur de
+        la fenêtre. Voir .managed-lists-body ci-dessous pour ce qui défile
+        à l'intérieur — l'en-tête, lui, ne bouge jamais. */
+     max-height:85vh; display:flex; flex-direction:column;
+   }
+   .modal-box-lists .view-head { flex:0 0 auto; }
+   .managed-lists-body { flex:1 1 auto; min-height:0; overflow-y:auto; margin:0 -6px; padding:0 6px; }
+   /* Trois colonnes côte à côte quand la largeur le permet (c'est le cas dès
+      que la boîte peut afficher au moins ~700px utiles), une colonne sur un
+      écran étroit — auto-fit calcule ça tout seul, sans media query dédiée. */
+   .managed-lists-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:16px; }
+   .managed-list-panel { min-width:0; border:1px solid var(--border); border-radius:var(--radius-lg); background:var(--surface-2); padding:12.8px; }
+   .managed-list-panel h3 { margin-bottom:10px; }
+   .managed-add { display:flex; gap:8px; }
+   .managed-add input { min-width:0; flex:1; background:var(--bg); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:8px 10px; color:var(--text); font-family:var(--font); outline:none; }
+   .managed-add input:focus { border-color:var(--accent); }
+   .managed-add button, .managed-delete { border:1px solid var(--border2); border-radius:var(--radius); background:var(--primary-soft); color:var(--accent); padding:8px 12px; font-family:var(--display); font-weight:600; cursor:pointer; transition:background var(--t), color var(--t); }
+   .managed-list { margin-top:12px; max-height:260px; overflow-y:auto; padding-right:4px; }
+   .managed-item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:9px 0; border-top:1px solid var(--border); }
+   .managed-delete { background:var(--neg-dim); color:var(--neg); border-color:transparent; }
+   /* Valeur référencée par au moins un trade : pas de bouton de suppression
+      à sa place, un indicatif de pourquoi. Le violet la distingue à la fois
+      du rouge « supprimable » et du bleu des actions — c'est un état, pas
+      une action possible. */
+   .managed-locked {
+     display:inline-flex; align-items:center; gap:5px;
+     background:var(--primary-soft); color:var(--violet);
+     border-radius:var(--radius); padding:8px 12px;
+     font-family:var(--mono); font-size:var(--fs-sm); font-weight:600;
+     cursor:help;
+   }
+   .settings-list-launcher { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:12px; padding-top:14px; border-top:1px solid var(--border2); }
+   .settings-list-launcher label { display:block; color:var(--text-title); font-weight:600; }
+   .settings-list-launcher .btn-connect { width:auto; margin-top:0; white-space:nowrap; }
+
+  /* Modal — édition de trade étendue */
+  .modal-box-lg { width:560px; max-width:92vw; max-height:85vh; overflow-y:auto; }
+  .modal-fields-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; margin-bottom:10px; }
+  .modal-box textarea { min-height:80px; }
+
+  /* Modal — vue détaillée d'un trade (lecture seule) */
+  /* Écran d'accueil et assistant d'import : `.modal-box` fixe la largeur à 336px,
+     un simple max-width inline ne l'élargit pas — d'où ces largeurs explicites. */
+  .modal-box-welcome { width:780px; max-width:92vw; max-height:90vh; overflow-y:auto; }
+  .modal-box-import { width:760px; max-width:92vw; max-height:90vh; overflow-y:auto; }
+  #import-preview-table { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:var(--fs-sm); }
+  #import-preview-table th, #import-preview-table td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  #import-preview-table th { font-family:var(--font); font-size:var(--fs-2xs); font-weight:600; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); }
+  .modal-box-view { width:640px; max-width:92vw; max-height:88vh; overflow-y:auto; }
+  .view-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .view-head-title { font-size:var(--fs-md); font-weight:600; color:var(--text-title); }
+  .view-head-pnl { font-size:var(--fs-lg); font-weight:600; font-family:var(--mono); }
+  .view-head-source { margin-top:4px; }
+  .view-head-source:empty { display:none; }
+  .view-section-title { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-family:var(--font); margin:16px 0 8px; }
+  .view-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px 16px; }
+  .view-item-label { font-size:var(--fs-2xs); color:var(--muted); font-family:var(--font); text-transform:uppercase; letter-spacing:.5px; margin-bottom:3px; }
+  .view-item-value { font-size:var(--fs-base); font-family:var(--mono); }
+  .view-note-box { background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius); padding:14px; font-size:var(--fs-base); line-height:1.6; white-space:pre-wrap; color:var(--text); }
+  .view-note-empty { color:var(--muted); font-style:italic; }
+  .close-x { background:transparent; border:none; color:var(--muted); font-size:var(--fs-lg); cursor:pointer; padding:2px 6px; border-radius:var(--radius-sm); }
+  .close-x:hover { color:var(--text); }
+
+  /* Pièces jointes */
+  .attach-upload-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; }
+  .attach-upload-row select { background:var(--bg); border:1px solid var(--border2); color:var(--text); padding:7px 10px; border-radius:var(--radius-sm); font-family:var(--font); font-size:var(--fs-sm); }
+  .attach-upload-row input[type=file] { font-size:var(--fs-xs); color:var(--muted); max-width:220px; }
+  .attach-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; }
+  .attach-item { position:relative; border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; background:var(--surface-2); }
+  .attach-item img { display:block; width:100%; height:90px; object-fit:cover; cursor:zoom-in; }
+  .attach-item-label { font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.5px; color:var(--muted); font-family:var(--font); padding:4px 6px; }
+  .attach-item-remove { position:absolute; top:4px; right:4px; background:rgba(0,0,0,.55); color:#fff; border:none; border-radius:var(--radius-sm); width:20px; height:20px; cursor:pointer; font-size:12px; line-height:1; }
+  .attach-item-remove:hover { background:var(--neg); }
+  .attach-empty { color:var(--muted); font-size:var(--fs-sm); padding:8px 0; }
+  .attach-lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; align-items:center; justify-content:center; z-index:300; cursor:zoom-out; }
+  .attach-lightbox img { max-width:90vw; max-height:90vh; border-radius:var(--radius); }
+
+@media (max-width:520px) {
+   .managed-lists-grid { grid-template-columns:1fr; }
+   .settings-list-launcher { align-items:flex-start; flex-direction:column; }
+   .settings-list-launcher .btn-connect { width:100%; }
+   .modal-fields-grid, .view-grid { grid-template-columns:1fr; }
+}

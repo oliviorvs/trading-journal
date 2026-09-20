@@ -1,0 +1,40 @@
+db
+docs
+logs
+tests
+
+# Python
+__init__.py
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environnement virtuel
+build_venv
+venv/
+.venv/
+env/
+
+# Variables d'environnement
+.env
+
+# Base de données locale
+*.db
+*.sqlite
+*.sqlite3
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Fichiers temporaires
+*.tmp
+*.bak

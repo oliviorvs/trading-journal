@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLxPhantom Journal — MT5</title>
+<link rel="icon" type="image/png" href="assets/logo.png">
+<link rel="apple-touch-icon" href="assets/logo.png">
+<script>
+  // Applique le thème sauvegardé avant le premier rendu, pour éviter tout
+  // flash de l'autre thème au chargement de la page.
+  (function() {
+    var saved = localStorage.getItem('tj-theme');
+    document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+  })();
+</script>
+<!-- Polices Google : chargement NON bloquant, et seulement si le poste est
+     en ligne. `media="print"` → `onload` fait passer la feuille en
+     chargement asynchrone ; les polices de repli (system-ui / monospace,
+     voir --font et --mono) s'appliquent en attendant, ou définitivement si
+     le réseau est absent. Le test `navigator.onLine` évite en plus
+     d'émettre une requête vouée à expirer sur une machine hors ligne : le
+     chargement de la page ne dépend en rien de ce fichier. -->
+<script>
+  (function() {
+    if (navigator.onLine === false) return;
+    var link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.media = 'print';
+    link.href = 'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Montserrat:wght@500;600;700&display=swap';
+    link.onload = function() { this.media = 'all'; };
+    document.head.appendChild(link);
+  })();
+</script>
+
+<!-- Chart.js servi EN LOCAL, sans aucun repli réseau : cette app est locale
+     et doit fonctionner sans internet. Le fichier js/vendor/chart.umd.min.js
+     (build UMD 4.4.1 minifié, MIT) est versionné avec le projet. Aucun repli
+     CDN : hors ligne, une requête vouée à échouer laisserait tous les
+     graphiques cassés sans le moindre message. Si le fichier manque,
+     `onerror` le signale explicitement dans l'interface plutôt que de
+     tenter internet.
+     Le dossier frontend/ entier est embarqué par PyInstaller (voir
+     ("frontend", "frontend") dans TradingJournal.spec). -->
+<script defer src="js/vendor/chart.umd.min.js" onerror="window.__chartMissing = true;"></script>
+<link rel="stylesheet" href="css/styles.css?v=20260913-font">
+</head>
+<body>
+
+<div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-label="Chargement de MLxPhantom Journal">
+  <div class="loading-inner">
+    <div class="loading-mark"><span></span></div>
+    <div class="loading-title">MLxPhantom <em>Journal</em></div>
+    <div class="loading-track"><div class="loading-progress" id="loading-progress"></div></div>
+    <div class="loading-caption" id="loading-caption">INITIALISATION DE VOTRE ESPACE</div>
+    <div class="loading-step" id="loading-step"></div>
+  </div>
+</div>
+<script>
+// ── Contrôleur de l'écran de démarrage ───────────────────────────────────────
+//
+// Correction : cet écran affichait une barre animée en CSS sur une durée FIXE
+// de 5 secondes, sans le moindre rapport avec l'état réel du backend. Deux
+// conséquences : 5 s d'attente imposées même quand tout était prêt en 300 ms,
+// et aucune information quand quelque chose bloquait vraiment.
+//
+// Il reflète désormais l'avancement réel :
+//   - phase « boot »   : attente que l'API locale réponde (/api/auth/status) ;
+//   - phase « app »    : après saisie du code, chaque étape de chargement des
+//                        données annonce la fonction qu'elle exécute.
+// Le nom de la fonction en cours est affiché sous la barre.
+//
+// API exposée (volontairement tolérante : tout appelant peut disparaître ou
+// arriver en retard sans casser le démarrage) :
+//   window.tjBoot.step(pct, caption, fnName)   met à jour la progression
+//   window.tjBoot.show()                       réaffiche l'écran (post-auth)
+//   window.tjBoot.fail(message)                signale un blocage (barre rouge)
+//   window.tjBoot.done()                       termine et masque l'écran
+(function() {
+  var screenEl = document.getElementById('loading-screen');
+  var barEl = document.getElementById('loading-progress');
+  var captionEl = document.getElementById('loading-caption');
+  var stepEl = document.getElementById('loading-step');
+  var current = 0;
+  var finished = false;
+  var failsafe = null;
+
+  // Correction : l'écran pouvait s'effacer en quelques centaines de ms (ex.
+  // juste après la saisie du code d'accès, quand le dashboard se charge
+  // depuis un cache déjà chaud) puis se rallumer aussitôt pour l'étape
+  // suivante — un clignotement qui donnait l'impression d'un bug d'affichage
+  // plutôt que d'une progression. `shownAt` mémorise l'instant où l'écran
+  // est redevenu visible ; hide() ne masque jamais avant qu'au moins
+  // MIN_VISIBLE_MS se soient écoulés depuis ce moment, quel que soit le
+  // délai déjà appliqué par done()/fail().
+  var MIN_VISIBLE_MS = 2000;
+  var shownAt = null;
+  var hideTimer = null;
+
+  function noteShown() {
+    if (shownAt === null) shownAt = Date.now();
+  }
+
+  function setBar(pct) {
+    // Monotone : la barre ne recule jamais, même si un appelant annonce une
+    // étape dans le désordre.
+    current = Math.max(current, Math.min(100, pct));
+    barEl.style.transform = 'scaleX(' + (current / 100) + ')';
+  }
+
+  function armFailsafe() {
+    // Garde-fou : si une étape ne rend jamais la main (bug, requête sans
+    // timeout), on ne laisse pas l'utilisateur devant un écran figé — on
+    // dévoile l'interface, qui affichera elle-même son erreur.
+    window.clearTimeout(failsafe);
+    failsafe = window.setTimeout(function() {
+      if (!finished) reallyHide();
+    }, 45000);
+  }
+
+  function reallyHide() {
+    finished = true;
+    shownAt = null;
+    window.clearTimeout(failsafe);
+    window.clearTimeout(hideTimer);
+    screenEl.classList.add('is-hidden');
+  }
+
+  function hide() {
+    var elapsed = shownAt === null ? MIN_VISIBLE_MS : (Date.now() - shownAt);
+    var remaining = MIN_VISIBLE_MS - elapsed;
+    window.clearTimeout(hideTimer);
+    if (remaining > 0) {
+      hideTimer = window.setTimeout(reallyHide, remaining);
+    } else {
+      reallyHide();
+    }
+  }
+
+  window.tjBoot = {
+    step: function(pct, caption, fnName) {
+      // Réaffichage après une phase terminée (attente du backend → puis
+      // chargement des données) : la barre repart de zéro, sinon la règle
+      // « monotone » ci-dessus la laisserait bloquée à 100 %.
+      if (finished) {
+        current = 0;
+        barEl.style.transition = 'none';
+        barEl.style.transform = 'scaleX(0)';
+        void barEl.offsetWidth;   // force le recalcul avant de réactiver la transition
+        barEl.style.transition = '';
+      }
+      finished = false;
+      window.clearTimeout(hideTimer);
+      screenEl.classList.remove('is-hidden');
+      noteShown();
+      barEl.classList.remove('is-error');
+      stepEl.classList.remove('is-error');
+      if (caption) captionEl.textContent = caption;
+      stepEl.textContent = fnName || '';
+      setBar(pct);
+      armFailsafe();
+    },
+    show: function() {
+      finished = false;
+      window.clearTimeout(hideTimer);
+      screenEl.classList.remove('is-hidden');
+      noteShown();
+      armFailsafe();
+    },
+    fail: function(message) {
+      window.clearTimeout(failsafe);
+      barEl.classList.add('is-error');
+      stepEl.classList.add('is-error');
+      stepEl.textContent = message || 'Échec du démarrage';
+      // L'écran s'efface quand même : l'interface derrière (écran de
+      // connexion ou dashboard) porte le message d'erreur détaillé et les
+      // actions possibles (bouton « Réessayer »). hide() applique en plus
+      // le délai minimum ci-dessus.
+      window.setTimeout(hide, 900);
+    },
+    done: function() {
+      setBar(100);
+      captionEl.textContent = 'PRÊT';
+      stepEl.textContent = '';
+      window.setTimeout(hide, 280);
+    },
+  };
+
+  armFailsafe();
+  // Première étape dès le parsing du HTML, avant tout appel réseau.
+  noteShown();
+  window.tjBoot.step(8, 'INITIALISATION DE VOTRE ESPACE', 'chargement de l\u2019interface');
+})();
+</script>
+
+<!-- Écran de bienvenue / code d'accès -----------------------------------
+     Bloque l'app tant que le bon code n'a pas été saisi. Au tout premier
+     lancement (aucun code enregistré côté backend), l'utilisateur doit en
+     créer un.
+
+     Portée réelle de cette protection (mise à jour suite à l'audit
+     sécurité) : le code est désormais vérifié par le backend, qui le
+     stocke haché (PBKDF2-HMAC-SHA256 salé — voir backend/auth_utils.py),
+     jamais en clair ni côté navigateur. Le jeton de session obtenu après
+     vérification est exigé par un middleware global pour TOUT /api/* (hors
+     /api/auth/*) et /uploads/* (voir backend/main.py) : l'API ne répond
+     plus à quiconque peut simplement l'atteindre sur 127.0.0.1:8000, ce qui
+     était la vraie faille de l'ancienne version (verrou 100% frontend,
+     hash non salé comparé en JS, API entièrement ouverte derrière).
+     Cela reste, comme le reste de l'app, une protection locale mono-
+     utilisateur : elle vise un tiers qui ouvrirait l'app ou enverrait des
+     requêtes depuis la même machine par-dessus l'épaule de l'utilisateur —
+     pas un attaquant ayant un accès complet et durable au poste, contre
+     lequel aucune solution purement locale ne peut protéger. -->
+<div id="access-gate">
+  <div class="gate-layout">
+    <section class="gate-intro">
+      <div class="gate-brand"><img src="assets/logo.png" alt="" class="brand-logo"> <span>MLxPhantom Journal</span></div>
+      <div class="gate-kicker">Votre trading, enfin lisible</div>
+      <h2>Décidez avec vos données.<br><em>Progressez avec méthode.</em></h2>
+      <p class="gate-intro-copy">Un espace privé pour comprendre vos trades, suivre votre discipline et construire une stratégie qui vous ressemble.</p>
+      <div class="gate-points">
+        <div><span class="point-mark">01</span><span>Analysez chaque décision, pas seulement le résultat.</span></div>
+        <div><span class="point-mark">02</span><span>Repérez vos habitudes par période et par symbole.</span></div>
+        <div><span class="point-mark">03</span><span>Gardez votre historique au même endroit.</span></div>
+      </div>
+      <div class="gate-chart" aria-hidden="true">
+        <div class="chart-line"></div>
+        <span class="chart-label chart-label-start">JAN</span>
+        <span class="chart-label chart-label-end">AUJOURD'HUI</span>
+      </div>
+    </section>
+
+    <section class="gate-box">
+      <div class="gate-box-top"><span class="gate-overline">ESPACE PRIVÉ</span><span class="gate-status"><i></i> LOCAL</span></div>
+      <div class="gate-logo">Bon retour.</div>
+      <p class="gate-sub" id="gate-sub">Bienvenue.</p>
+
+      <div id="gate-loading" class="gate-loading" style="display:none">
+        <div class="loading-spinner"></div>
+      </div>
+
+      <div id="gate-offline" class="gate-offline" style="display:none">
+        <button class="btn-connect" id="gate-btn-retry">Réessayer <span>↻</span></button>
+      </div>
+
+      <div id="gate-create" style="display:none">
+        <div class="field"><label>Nouveau code d'accès</label><input id="gate-code-new" type="password" inputmode="numeric" autocomplete="new-password" placeholder="••••••"></div>
+        <div class="field"><label>Confirmer le code</label><input id="gate-code-confirm" type="password" inputmode="numeric" autocomplete="new-password" placeholder="••••••"></div>
+        <button class="btn-connect" id="gate-btn-create">Créer le code et ouvrir l'app <span>↗</span></button>
+      </div>
+
+      <div id="gate-enter" style="display:none">
+        <div class="field"><label>Code d'accès</label><input id="gate-code-enter" type="password" inputmode="numeric" autocomplete="new-password" placeholder="••••••"></div>
+        <button class="btn-connect" id="gate-btn-enter">Ouvrir l'app <span>↗</span></button>
+        <p class="gate-forgot" id="gate-forgot">Code oublié ?</p>
+      </div>
+
+      <div id="gate-recover" style="display:none">
+        <div class="field"><label>Code de récupération</label><input id="gate-recovery-enter" type="text" autocomplete="off" autocapitalize="characters" placeholder="MLX-XXXX-XXXX-XXXX"></div>
+        <button class="btn-connect" id="gate-btn-recover">Vérifier le code <span>↗</span></button>
+        <p class="gate-back" id="gate-back">Retour à la connexion</p>
+      </div>
+
+      <div id="gate-reset" style="display:none">
+        <div class="field"><label>Nouveau code d'accès</label><input id="gate-reset-new" type="password" autocomplete="new-password" placeholder="••••••"></div>
+        <div class="field"><label>Confirmer le nouveau code</label><input id="gate-reset-confirm" type="password" autocomplete="new-password" placeholder="••••••"></div>
+        <button class="btn-connect" id="gate-btn-reset">Enregistrer le nouveau code <span>↗</span></button>
+      </div>
+
+      <div id="gate-recovery-display" style="display:none">
+        <div class="recovery-title">Votre code de récupération</div>
+        <p class="recovery-copy">Notez ce code maintenant. Il sera nécessaire si vous oubliez votre code d'accès.</p>
+        <div class="recovery-code" id="gate-recovery-code"></div>
+        <button class="recovery-copy-btn" id="gate-recovery-copy" type="button">Copier le code</button>
+        <button class="btn-connect" id="gate-recovery-continue">J'ai enregistré le code <span>↗</span></button>
+      </div>
+
+      <p class="gate-error" id="gate-error" style="display:none"></p>
+      <div class="gate-box-foot"><span>Données conservées localement</span><span>MT4 / MT5</span></div>
+    </section>
+  </div>
+</div>
+<script>
+(function() {
+  // Même origine que la page (voir resolveBase dans js/config.js) : ce script
+  // inline s'exécute avant le module ES, il ne peut donc pas l'importer, mais
+  // il doit suivre exactement la même règle — sinon l'écran de verrouillage
+  // interrogerait 8000 pendant que le reste de l'app parle au bon port.
+  var AUTH = (function() {
+    var loc = window.location;
+    if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return 'http://127.0.0.1:8000/api/auth';
+    if (loc.port === '5500') return loc.protocol + '//' + loc.hostname + ':8000/api/auth';
+    return loc.origin + '/api/auth';
+  })();
+  // Doit rester aligné sur MIN_CODE_LENGTH dans backend/routers/auth.py : ce
+  // contrôle n'est qu'un confort de saisie, le backend refuse de toute façon
+  // un code plus court (422).
+  var MIN_CODE_LENGTH = 6;
+
+  var sub = document.getElementById('gate-sub');
+  var errorEl = document.getElementById('gate-error');
+
+  // Le contrôleur de l'écran de démarrage est défini juste au-dessus, mais on
+  // reste défensif : aucun appel de progression ne doit pouvoir empêcher
+  // l'ouverture de l'application.
+  function boot(method, a, b, c) {
+    try { if (window.tjBoot && window.tjBoot[method]) window.tjBoot[method](a, b, c); }
+    catch (e) { /* purement cosmétique */ }
+  }
+
+  function showError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = 'block';
+  }
+
+  function clearError() {
+    errorEl.style.display = 'none';
+  }
+
+  // Le jeton de session est géré par config.js (module ES chargé plus bas,
+  // voir js/app.js) : ce script inline s'exécute avant, donc si aucune
+  // fonction n'est encore disponible on le laisse en attente — voir la
+  // reprise correspondante dans config.js.
+  function setToken(token) {
+    if (window.tjSetAuthToken) window.tjSetAuthToken(token);
+    else window.__tjPendingAuthToken = token;
+  }
+
+  function unlock(token) {
+    // Le chargement des données reprend la main sur l'écran de démarrage :
+    // il est réaffiché ici et c'est js/app.js qui le fera disparaître une
+    // fois le dashboard réellement alimenté (voir loadDashboardData).
+    boot('step', 40, 'OUVERTURE DE VOTRE ESPACE', 'authentification');
+    setToken(token);
+    document.documentElement.classList.add('tj-unlocked');
+    window.__tjAuthReady = true;
+    window.dispatchEvent(new Event('tj-authenticated'));
+  }
+
+  function showPanel(id) {
+    ['gate-loading', 'gate-offline', 'gate-create', 'gate-enter', 'gate-recover', 'gate-reset', 'gate-recovery-display'].forEach(function(panelId) {
+      var el = document.getElementById(panelId);
+      if (el) el.style.display = panelId === id ? 'block' : 'none';
+    });
+  }
+
+  // Petit client HTTP pour /api/auth/* : ces routes sont volontairement
+  // exclues du middleware d'authentification du backend (voir main.py),
+  // elles servent justement à obtenir un jeton.
+  function api(path, body) {
+    return fetch(AUTH + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    }).then(function(r) {
+      return r.json().catch(function() { return {}; }).then(function(data) {
+        return { ok: r.ok, status: r.status, data: data };
+      });
+    });
+  }
+
+  function showRecoveryDisplay(code, token) {
+    document.getElementById('gate-recovery-code').textContent = code;
+    document.getElementById('gate-recovery-display').dataset.token = token;
+    showPanel('gate-recovery-display');
+    sub.textContent = 'Conservez ce code dans un endroit sûr.';
+  }
+
+  function startEnterFlow() {
+    clearError();
+    sub.textContent = "Bienvenue. Entrez votre code d'accès pour ouvrir l'application.";
+    showPanel('gate-enter');
+    var inputEnter = document.getElementById('gate-code-enter');
+    inputEnter.value = '';
+    inputEnter.focus();
+  }
+
+  function startCreateFlow() {
+    clearError();
+    sub.textContent = "Bienvenue ! Créez un code d'accès pour protéger l'ouverture de l'application.";
+    showPanel('gate-create');
+  }
+
+  // Point d'entrée : demande au backend si un code existe déjà. Contrairement
+  // à l'ancienne version (simple lecture de localStorage, synchrone et
+  // toujours disponible), cet appel réseau peut échouer si le backend n'est
+  // pas encore prêt (ex. démarrage de l'app packagée) — d'où l'écran
+  // "gate-offline" avec un bouton pour réessayer, plutôt qu'un plantage
+  // silencieux de l'écran d'accueil.
+  //
+  // Correction : un seul essai était tenté. Lancé juste après le backend
+  // (START.bat, ou une machine lente au premier démarrage), il pouvait tomber
+  // pendant que le serveur écoutait à peine, et l'utilisateur se retrouvait
+  // sur l'écran « hors ligne » alors que l'API devenait disponible une
+  // seconde plus tard. On réessaie maintenant pendant ~8 s, en faisant
+  // avancer la barre de démarrage à chaque tentative — ce qui rend visible
+  // ce qui est réellement en train d'attendre.
+  var BOOT_ATTEMPTS = 10;
+  var BOOT_RETRY_MS = 800;
+  // init() est aussi rappelé par lockJournal() : une fois le premier
+  // démarrage passé, l'écran de démarrage ne doit plus réapparaître pour un
+  // simple verrouillage — il ne sert qu'au tout premier contact avec l'API.
+  var bootPhase = true;
+
+  function probeBackend(attempt) {
+    if (!bootPhase) return probeBackendSilent(attempt);
+    boot('step',
+      10 + Math.round((attempt / BOOT_ATTEMPTS) * 22),
+      'DÉMARRAGE DU SERVICE LOCAL',
+      attempt === 0 ? 'GET /api/auth/status' : 'GET /api/auth/status — essai ' + (attempt + 1));
+    fetch(AUTH + '/status').then(function(r) {
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
+    }).then(function(d) {
+      boot('done');
+      bootPhase = false;
+      if (d.configured) startEnterFlow();
+      else startCreateFlow();
+    }).catch(function() {
+      if (attempt + 1 < BOOT_ATTEMPTS) {
+        window.setTimeout(function() { probeBackend(attempt + 1); }, BOOT_RETRY_MS);
+        return;
+      }
+      boot('fail', 'service local injoignable');
+      bootPhase = false;
+      showPanel('gate-offline');
+      sub.textContent = "Impossible de contacter le service local.";
+      showError("Vérifiez que l'application backend est bien lancée, puis réessayez.");
+    });
+  }
+
+  // Même sondage, sans toucher à l'écran de démarrage (retour sur le verrou
+  // après un « Fermer le journal », bouton « Réessayer »).
+  function probeBackendSilent(attempt) {
+    fetch(AUTH + '/status').then(function(r) {
+      if (!r.ok) throw new Error('status ' + r.status);
+      return r.json();
+    }).then(function(d) {
+      if (d.configured) startEnterFlow();
+      else startCreateFlow();
+    }).catch(function() {
+      if (attempt + 1 < BOOT_ATTEMPTS) {
+        window.setTimeout(function() { probeBackendSilent(attempt + 1); }, BOOT_RETRY_MS);
+        return;
+      }
+      showPanel('gate-offline');
+      sub.textContent = "Impossible de contacter le service local.";
+      showError("Vérifiez que l'application backend est bien lancée, puis réessayez.");
+    });
+  }
+
+  function init() {
+    clearError();
+    showPanel('gate-loading');
+    sub.textContent = 'Connexion au service local...';
+    probeBackend(0);
+  }
+
+  document.getElementById('gate-btn-retry').addEventListener('click', init);
+
+  document.getElementById('gate-btn-create').addEventListener('click', function() {
+    clearError();
+    var a = document.getElementById('gate-code-new').value;
+    var b = document.getElementById('gate-code-confirm').value;
+    if (!a || a.length < MIN_CODE_LENGTH) return showError('Le code doit contenir au moins ' + MIN_CODE_LENGTH + ' caractères.');
+    if (a !== b) return showError('Les deux codes ne correspondent pas.');
+    api('/setup', { code: a }).then(function(res) {
+      if (!res.ok) return showError((res.data && res.data.detail) || 'Erreur lors de la création du code.');
+      showRecoveryDisplay(res.data.recovery_code, res.data.token);
+    }).catch(function() { showError('Impossible de contacter le service local.'); });
+  });
+  document.getElementById('gate-code-confirm').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('gate-btn-create').click();
+  });
+
+  document.getElementById('gate-btn-enter').addEventListener('click', function() {
+    clearError();
+    var inputEnter = document.getElementById('gate-code-enter');
+    if (!inputEnter.value) return showError('Veuillez entrer votre code.');
+    api('/login', { code: inputEnter.value }).then(function(res) {
+      if (!res.ok) {
+        showError((res.data && res.data.detail) || 'Code incorrect.');
+        inputEnter.value = '';
+        inputEnter.focus();
+        return;
+      }
+      unlock(res.data.token);
+    }).catch(function() { showError('Impossible de contacter le service local.'); });
+  });
+  document.getElementById('gate-code-enter').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') document.getElementById('gate-btn-enter').click();
+  });
+
+  document.getElementById('gate-forgot').addEventListener('click', function() {
+    clearError();
+    sub.textContent = 'Saisissez votre code de récupération pour réinitialiser l’accès.';
+    showPanel('gate-recover');
+  });
+  document.getElementById('gate-btn-recover').addEventListener('click', function() {
+    clearError();
+    var recoveryInput = document.getElementById('gate-recovery-enter');
+    var recoveryCode = recoveryInput.value.trim().toUpperCase();
+    if (!recoveryCode) return showError('Veuillez entrer votre code de récupération.');
+    api('/recover/verify', { recovery_code: recoveryCode }).then(function(res) {
+      if (!res.ok) {
+        showError((res.data && res.data.detail) || 'Code de récupération incorrect.');
+        recoveryInput.select();
+        return;
+      }
+      sub.textContent = 'Créez un nouveau code d’accès.';
+      showPanel('gate-reset');
+    }).catch(function() { showError('Impossible de contacter le service local.'); });
+  });
+  document.getElementById('gate-back').addEventListener('click', startEnterFlow);
+
+  document.getElementById('gate-btn-reset').addEventListener('click', function() {
+    clearError();
+    var recoveryCode = document.getElementById('gate-recovery-enter').value.trim().toUpperCase();
+    var newCode = document.getElementById('gate-reset-new').value;
+    var confirmCode = document.getElementById('gate-reset-confirm').value;
+    if (!newCode || newCode.length < MIN_CODE_LENGTH) return showError('Le code doit contenir au moins ' + MIN_CODE_LENGTH + ' caractères.');
+    if (newCode !== confirmCode) return showError('Les deux codes ne correspondent pas.');
+    // Le backend revérifie lui-même le code de récupération (voir
+    // /recover/reset) : pas besoin de garder d'état côté frontend entre
+    // l'écran "gate-recover" et celui-ci.
+    api('/recover/reset', { recovery_code: recoveryCode, new_code: newCode }).then(function(res) {
+      if (!res.ok) return showError((res.data && res.data.detail) || 'Erreur lors de la réinitialisation.');
+      showRecoveryDisplay(res.data.recovery_code, res.data.token);
+    }).catch(function() { showError('Impossible de contacter le service local.'); });
+  });
+
+  document.getElementById('gate-recovery-copy').addEventListener('click', function() {
+    var code = document.getElementById('gate-recovery-code').textContent;
+    navigator.clipboard.writeText(code).then(function() {
+      document.getElementById('gate-recovery-copy').textContent = 'Code copié';
+    }).catch(function() { showError('Copie impossible : notez le code manuellement.'); });
+  });
+  document.getElementById('gate-recovery-continue').addEventListener('click', function() {
+    var token = document.getElementById('gate-recovery-display').dataset.token;
+    if (token) unlock(token);
+  });
+
+  window.lockJournal = function() {
+    var token = window.tjGetAuthToken ? window.tjGetAuthToken() : null;
+    document.documentElement.classList.remove('tj-unlocked');
+    setToken(null);
+    // Invalide vraiment la session côté backend plutôt que de la laisser
+    // vivre jusqu'à son expiration naturelle (voir /api/auth/logout).
+    if (token) {
+      fetch(AUTH + '/logout', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token } }).catch(function() {});
+    }
+    var passwordField = document.getElementById('inp-pass');
+    if (passwordField) passwordField.value = '';
+    var accessInputs = document.querySelectorAll('#gate-code-enter, #gate-code-new, #gate-code-confirm, #gate-recovery-enter, #gate-reset-new, #gate-reset-confirm');
+    accessInputs.forEach(function(input) { input.value = ''; });
+    init();
+  };
+
+  init();
+})();
+</script>
+
+<div class="shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div>
+        <h1><img src="assets/logo.png" alt="" class="brand-logo"> <span>MLxPhantom Journal</span></h1>
+        <p>MetaTrader 4 / 5</p>
+      </div>
+      <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Changer de thème">🌙</button>
+    </div>
+
+    <nav>
+      <div class="nav-item active" onclick="goTo('dashboard',this)"><span class="nav-icon">◉</span>Dashboard</div>
+      <div class="nav-item" onclick="goTo('calendar',this)"><span class="nav-icon">▦</span>Calendrier</div>
+      <div class="nav-item" onclick="goTo('week',this)"><span class="nav-icon">≡</span>Par période</div>
+      <div class="nav-item" onclick="goTo('repartitions',this)"><span class="nav-icon">▤</span>Répartitions</div>
+      <div class="nav-item" onclick="goTo('trades',this)"><span class="nav-icon">↔</span>Trades</div>
+      <div class="nav-item" onclick="goTo('symbols',this)"><span class="nav-icon">◈</span>Par symbole</div>
+      <div class="nav-item" onclick="goTo('analyzer',this)"><span class="nav-icon">◎</span>Analyzer</div>
+      <div class="nav-item" onclick="goTo('settings',this)"><span class="nav-icon">⚙</span>Réglages</div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <button class="logout-btn" id="logout-btn" type="button" onclick="lockJournal()" title="Fermer le journal et revenir à l'écran d'accueil">
+        <span>↪</span> Fermer le journal
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Bandeau d'état de l'application. Masqué tant que tout va bien. Il ne
+         bloque rien : le journal reste entièrement consultable hors ligne
+         (les données viennent de la base locale), ce bandeau dit seulement
+         pourquoi les chiffres du compte ne se rafraîchissent pas. -->
+    <div id="app-status-banner" class="app-banner" role="status" hidden>
+      <span class="app-banner-icon" aria-hidden="true">⚠</span>
+      <span class="app-banner-text" id="app-status-banner-text"></span>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="panel active">
+      <div class="section-top">
+        <div class="page-head"><div class="page-title">Tableau de bord</div><div class="page-sub">Vue d'ensemble de votre performance de trading</div></div>
+        <div class="section-top-actions">
+          <div id="dashboard-period-filter" class="segmented">
+            <button class="filter-btn" onclick="switchDashboardPeriod('1m',this)">1 mois</button>
+            <button class="filter-btn" onclick="switchDashboardPeriod('3m',this)">3 mois</button>
+            <button class="filter-btn" onclick="switchDashboardPeriod('6m',this)">6 mois</button>
+            <button class="filter-btn active" onclick="switchDashboardPeriod('all',this)">Tout</button>
+          </div>
+          <button class="btn-sync" data-sync onclick="syncTradesFromButton()">⟳ Synchroniser</button>
+          <select id="sym-select" class="select-inline" onchange="applyDashboardFilters()">
+            <option value="">Tous les symboles</option>
+          </select>
+        </div>
+      </div>
+      <div class="metrics-row" id="metrics"></div>
+
+      <div class="dashboard-grid">
+        <div class="dashboard-main">
+          <div class="chart-card dashboard-chart-card">
+            <div class="tabs">
+              <button class="tab active" onclick="switchChart('equity',this)">Capital</button>
+              <button class="tab" onclick="switchChart('drawdown',this)">Drawdown</button>
+              <button class="tab" onclick="switchChart('real',this)">Équité réelle</button>
+              <button class="tab" onclick="switchChart('load',this)">Charge du dépôt</button>
+            </div>
+            <div id="chart-equity-panel">
+              <div class="chart-head">
+                <span class="chart-title" id="chart-equity-title">Courbe de capital (solde compte MT5)</span>
+              </div>
+              <div class="chart-wrap"><canvas id="chartEquity"></canvas><div class="chart-empty" id="equity-empty" style="display:none">Aucune donnée sur cette période</div></div>
+            </div>
+            <div id="chart-real-panel" style="display:none">
+              <div class="chart-head">
+                <span class="chart-title">Équité réelle (solde net + flottant)</span>
+                <span class="field-hint" id="real-equity-note"></span>
+              </div>
+              <div class="chart-wrap"><canvas id="chartReal"></canvas><div class="chart-empty" id="real-empty" style="display:none">Aucune donnée sur cette période</div></div>
+              <div class="field-hint" id="real-equity-recon" style="display:none"></div>
+            </div>
+            <div id="chart-load-panel" style="display:none">
+              <div class="chart-head">
+                <span class="chart-title">Charge du dépôt (marge / équité, %)</span>
+                <span class="field-hint" id="deposit-load-note"></span>
+              </div>
+              <div class="chart-wrap"><canvas id="chartLoad"></canvas><div class="chart-empty" id="load-empty" style="display:none">Aucune marge connue sur cette période</div></div>
+            </div>
+            <div id="chart-dd-panel" style="display:none">
+              <div class="chart-head">
+                <span class="chart-title">Drawdown (%)</span>
+              </div>
+              <div class="chart-wrap"><canvas id="chartDD"></canvas><div class="chart-empty" id="dd-empty" style="display:none">Aucune donnée sur cette période</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dashboard-side">
+          <div class="metrics-row side-metrics" id="metrics-2"></div>
+
+          <div class="account-overview-card" id="dashboard-account-card" aria-label="Situation du compte MT5">
+            <div class="account-summary-row">
+              <div class="metric-label">Solde du compte</div>
+              <div class="account-overview-value" id="dashboard-balance">—</div>
+            </div>
+            <div class="account-summary-row">
+              <div class="metric-label">Équité</div>
+              <div class="account-overview-value" id="dashboard-equity">—</div>
+            </div>
+            <!-- Marge libre : notion MT5 (masquée pour un compte manuel, voir applyAccountModeUI dans account.js). -->
+            <div class="account-summary-row" id="dashboard-margin-row">
+              <div class="metric-label">Marge libre</div>
+              <div class="account-overview-value" id="dashboard-margin">—</div>
+            </div>
+          </div>
+
+          <div class="highlights-grid side-highlights" id="highlights-secondary"></div>
+
+          <div class="chart-card period-results-card">
+            <div class="chart-head">
+              <div>
+                <div class="chart-title">Résultats de la période</div>
+                <div class="metric-sub" id="period-results-summary">—</div>
+              </div>
+              <div class="period-win-rate" id="period-win-rate">—</div>
+            </div>
+            <div class="period-results-layout">
+              <div class="period-results-chart-wrap"><canvas id="chartPeriodResults"></canvas></div>
+              <div class="period-results-legend" id="period-results-legend"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="highlights-grid" id="highlights"></div>
+    </div>
+
+    <!-- Calendar -->
+    <div id="page-calendar" class="panel">
+      <div class="section-top">
+        <div class="page-head"><div class="page-title">Calendrier</div><div class="page-sub">Résultat net jour par jour</div></div>
+      </div>
+      <div class="chart-card cal-card">
+        <div class="cal-card-head">
+          <span class="chart-title">Calendrier de performance</span>
+          <span class="cal-card-period" id="cal-period-label"></span>
+        </div>
+        <div class="cal-nav">
+          <button onclick="changeMonth(-1)" aria-label="Mois précédent">←</button>
+          <div class="cal-nav-center">
+            <span class="cal-month" id="cal-month-label"></span>
+            <span class="cal-summary" id="cal-summary"></span>
+          </div>
+          <button onclick="changeMonth(1)" aria-label="Mois suivant">→</button>
+        </div>
+        <div class="cal-grid" id="cal-grid"></div>
+      </div>
+
+      <!-- Stats étendues (R-multiples, risque, chaleur horaire, perf. glissante) -->
+      <div class="repart-grid">
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Distribution des R-multiples</span></div>
+          <div class="metric-sub" id="r-hist-sub" style="margin-bottom:8px">—</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="chartRHist"></canvas></div>
+          <div class="metric-sub bucket-breakdown" id="r-hist-breakdown"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Distribution du risque par trade</span></div>
+          <div class="metric-sub" style="margin-bottom:8px">% du capital risqué par position, au moment de chaque trade</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="chartRiskDist"></canvas></div>
+          <div class="metric-sub bucket-breakdown" id="risk-dist-breakdown"></div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head"><span class="chart-title">Carte de chaleur horaire</span></div>
+        <div class="metric-sub" style="margin-bottom:12px">Intensité du P&amp;L par heure et par jour de la semaine</div>
+        <div class="heatmap-scroll"><div class="heatmap-grid" id="heatmap-grid"></div></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-head"><span class="chart-title">Performance glissante</span></div>
+        <div class="metric-sub" style="margin-bottom:8px">Taux de réussite glissant (10) &amp; R cumulé</div>
+        <div class="chart-wrap"><canvas id="chartRolling"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Répartitions -->
+    <div id="page-repartitions" class="panel">
+      <div class="section-top">
+        <div class="page-head"><div class="page-title">Répartitions</div><div class="page-sub">Performance par angle d'analyse</div></div>
+      </div>
+      <div class="repart-grid">
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par symbole</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-5b"><span>Symbole</span><span>Trades</span><span>Part</span><span>WR</span><span>P&amp;L</span></div>
+            <div id="repart-symbol"></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Long / Short</span></div>
+          <div class="ls-bar"><div class="ls-bar-fill" id="ls-bar-fill"></div></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-3"><span>Métrique</span><span style="text-align:right">Long</span><span style="text-align:right">Short</span></div>
+            <div id="repart-long-short"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="repart-grid">
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par tag · setup</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-6"><span>Tag</span><span>Trades</span><span>Part</span><span>WR</span><span>R moy.</span><span>P&amp;L</span></div>
+            <div id="repart-tag"></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par playbook · stratégie</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-6"><span>Playbook</span><span>Trades</span><span>Part</span><span>WR</span><span>R moy.</span><span>P&amp;L</span></div>
+            <div id="repart-playbook"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="repart-grid">
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par raison de sortie</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-6"><span>Sortie</span><span>Trades</span><span>Part</span><span>WR</span><span>R moy.</span><span>P&amp;L</span></div>
+            <div id="repart-exit"></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par durée de détention</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-5b"><span>Durée</span><span>Trades</span><span>Part</span><span>WR</span><span>P&amp;L</span></div>
+            <div id="repart-duration"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="repart-grid">
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Par timeframe d'entrée</span></div>
+          <div class="trade-table">
+            <div class="repart-row repart-header repart-6"><span>Timeframe</span><span>Trades</span><span>Part</span><span>WR</span><span>R moy.</span><span>P&amp;L</span></div>
+            <div id="repart-timeframe"></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-head"><span class="chart-title">Discipline · bulletin</span></div>
+          <div class="discipline-box">
+            <div class="discipline-ring" id="discipline-ring">—</div>
+            <div class="metric-sub">Bulletin global de discipline<br>basé sur SL, sizing et régularité horaire</div>
+          </div>
+          <div class="discipline-list" id="discipline-list"></div>
+          <div class="metric-sub" id="discipline-series" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Week / Month -->
+    <div id="page-week" class="panel">
+      <div class="section-top"><div class="page-head"><div class="page-title">Performance par période</div><div class="page-sub">Résultats agrégés par semaine, mois ou année</div></div></div>
+      <div class="tabs">
+        <button class="tab active" onclick="switchPeriod('week',this)">Semaine</button>
+        <button class="tab" onclick="switchPeriod('month',this)">Mois</button>
+      </div>
+      <div class="period-summary-grid" id="period-summary"></div>
+      <div class="period-selection" id="period-selection">Cliquez sur une barre pour afficher le détail de la période.</div>
+      <div class="chart-card period-chart-card">
+        <div class="chart-head">
+          <div>
+            <div class="chart-title" id="period-chart-title">P&L par semaine</div>
+            <div class="metric-sub">Survolez une barre pour voir le win rate et le détail des trades</div>
+          </div>
+          <!-- Pagination : remplace le défilement horizontal. Masquée tant
+               que toutes les périodes tiennent en une seule vue. -->
+          <div class="period-pager" id="period-pager" hidden>
+            <button type="button" class="period-pager-btn" id="period-prev" onclick="changePeriodPage(-1)" aria-label="Périodes précédentes">←</button>
+            <span class="period-pager-label" id="period-pager-label" aria-live="polite"></span>
+            <button type="button" class="period-pager-btn" id="period-next" onclick="changePeriodPage(1)" aria-label="Périodes suivantes">→</button>
+          </div>
+        </div>
+        <div class="period-chart-wrap">
+          <canvas id="periodChart"></canvas>
+          <div class="chart-empty" id="period-empty">Aucune donnée</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trades -->
+    <div id="page-trades" class="panel">
+      <div class="section-top"><div class="page-head"><div class="page-title">Historique des trades</div><div class="page-sub">Toutes vos positions clôturées et ouvertes</div></div></div>
+      <div class="trade-filters">
+        <div class="filter-field"><label>Symbole</label>
+          <select id="tf-symbol" onchange="applyTradeFilters()"><option value="">Tous</option></select>
+        </div>
+        <div class="filter-field"><label>Sens</label>
+          <select id="tf-direction" onchange="applyTradeFilters()">
+            <option value="">Tous</option><option value="buy">Achat</option><option value="sell">Vente</option>
+          </select>
+        </div>
+        <div class="filter-field"><label>Résultat</label>
+          <select id="tf-result" onchange="applyTradeFilters()">
+            <option value="">Tous</option><option value="win">Gagnant</option><option value="loss">Perdant</option><option value="breakeven">Breakeven</option>
+          </select>
+        </div>
+        <!-- Origine du trade : saisies et imports cohabitent dans un compte
+             manuel (masqué sur un compte MT5, où tout vient de la synchro). -->
+        <div class="filter-field" id="tf-source-field" style="display:none"><label>Source</label>
+          <select id="tf-source" onchange="applyTradeFilters()">
+            <option value="">Toutes</option><option value="manual">Saisie manuelle</option><option value="import">Import</option>
+          </select>
+        </div>
+        <div class="filter-field"><label>Du</label><input type="date" id="tf-from" onchange="applyTradeFilters()"></div>
+        <div class="filter-field"><label>Au</label><input type="date" id="tf-to" onchange="applyTradeFilters()"></div>
+        <div class="filter-field"><label>Par page</label>
+          <select id="tf-page-size" onchange="changeTradePageSize(this.value)">
+            <option value="10">10 trades</option><option value="20" selected>20 trades</option>
+          </select>
+        </div>
+        <button class="btn-reset" onclick="resetTradeFilters()">Réinitialiser</button>
+        <button class="btn-connect" id="btn-export-pdf" style="width:auto;margin-top:0;padding:8px 16px" onclick="exportJournalPdf()" title="Exporte en PDF les trades clôturés de la période 'Du/Au' choisie ci-dessus, avec leurs notes">⭳ Export PDF</button>
+        <!-- Visible uniquement sur un compte manuel (voir loadAccountInfo, account.js). -->
+        <button class="btn-connect" id="btn-add-trade" style="display:none;width:auto;margin-top:0;padding:8px 16px" onclick="openCreateTradeModal()" title="Saisir un trade à la main">+ Ajouter un trade</button>
+        <!-- Visible sur un compte manuel OU quand aucun compte n'est actif
+             (l'import peut créer un compte manuel au passage) — voir
+             loadAccountInfo (account.js) et import.js. -->
+        <button class="btn-connect" id="btn-import-trades" style="width:auto;margin-top:0;padding:8px 16px" onclick="openImportModal()" title="Importer des trades depuis un CSV ou un rapport MT5 (HTML/xlsx)">⭱ Importer</button>
+      </div>
+      <div class="trade-table">
+        <div class="trade-row trade-header">
+          <span>Symbole</span><span>Sens</span><span>Vol.</span><span>Ouverture</span><span>Clôture</span><span>Prix ouv.</span><span>Prix clô.</span><span>Pips</span><span>Profit</span><span title="Risque en % du capital au moment du trade, calculé depuis le Stop Loss initial">Risque SL</span><span title="Ratio R : profit rapporté au risque calculé depuis le Stop Loss initial">Ratio R</span><span>Note</span><span>Statut</span><span></span>
+        </div>
+        <div id="trade-list"></div>
+        <div id="trade-pagination" class="trade-pagination"></div>
+      </div>
+    </div>
+
+    <!-- Symbols -->
+    <div id="page-symbols" class="panel">
+      <div class="section-top"><div class="page-head"><div class="page-title">Performance par symbole</div><div class="page-sub">Où vos gains et vos pertes se concentrent</div></div></div>
+      <div class="chart-card">
+        <div class="chart-wrap" style="height:280px"><canvas id="chartSymbols"></canvas></div>
+      </div>
+      <div class="trade-table" style="margin-top:16px">
+        <div class="trade-row trade-header" style="grid-template-columns:1fr 100px 100px 80px">
+          <span>Symbole</span><span>P&L total</span><span>Win rate</span><span>Trades</span>
+        </div>
+        <div id="sym-list"></div>
+      </div>
+    </div>
+
+    <!-- Analyzer -->
+    <div id="page-analyzer" class="panel">
+      <div class="section-top">
+        <div class="page-head">
+          <div class="page-title">Analyzer</div>
+          <div class="page-sub">Qu'est-ce qui caractérise vos bons trades, vos mauvais trades et vos erreurs répétées ?</div>
+        </div>
+      </div>
+
+      <div class="trade-filters">
+        <div class="filter-field">
+          <label for="an-date-from">Du</label>
+          <input type="date" id="an-date-from">
+        </div>
+        <div class="filter-field">
+          <label for="an-date-to">Au</label>
+          <input type="date" id="an-date-to">
+        </div>
+        <div class="filter-field">
+          <label for="an-symbol">Symbole</label>
+          <select id="an-symbol"><option value="">Tous les symboles</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="an-source">Origine</label>
+          <select id="an-source">
+            <option value="">Toutes</option>
+            <option value="mt5">MT5</option>
+            <option value="manual">Manuel</option>
+            <option value="import">Import</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <!-- Décision D1 : brut par défaut, pour rester comparable au Dashboard. -->
+          <label for="an-base">Base</label>
+          <select id="an-base">
+            <option value="gross">Brut</option>
+            <option value="net">Net (frais inclus)</option>
+          </select>
+        </div>
+        <div class="analyzer-actions">
+          <button class="btn-sync" onclick="applyAnalyzerFilters()">Appliquer</button>
+          <button class="btn-reset" onclick="resetAnalyzerFilters()">Réinitialiser</button>
+        </div>
+      </div>
+
+      <div class="tabs analyzer-tabs" id="analyzer-tabs">
+        <button class="tab active" onclick="switchAnalyzerTab('overview',this)">Vue d'ensemble</button>
+        <button class="tab" onclick="switchAnalyzerTab('setups',this)">Setups</button>
+        <button class="tab" onclick="switchAnalyzerTab('sessions',this)">Sessions</button>
+        <button class="tab" onclick="switchAnalyzerTab('instruments',this)">Instruments</button>
+        <button class="tab" onclick="switchAnalyzerTab('temporal',this)">Temporel</button>
+        <button class="tab" onclick="switchAnalyzerTab('discipline',this)">Discipline</button>
+        <button class="tab" onclick="switchAnalyzerTab('psychology',this)">Psychologie</button>
+        <button class="tab" onclick="switchAnalyzerTab('patterns',this)">Patterns</button>
+        <button class="tab" onclick="switchAnalyzerTab('report',this)">Rapport</button>
+        <button class="tab" onclick="switchAnalyzerTab('settings',this)">Paramètres</button>
+      </div>
+
+      <div id="analyzer-body"></div>
+    </div>
+
+    <!-- Settings -->
+    <div id="page-settings" class="panel">
+      <div class="section-top"><div class="page-head"><div class="page-title">Réglages</div><div class="page-sub">Comptes, capital de référence et listes du journal</div></div></div>
+      <div class="settings-grid">
+        <!-- Colonne gauche : les réglages du journal lui-même (devise
+             d'affichage, listes de setups/émotions, capital de référence).
+             Colonne droite : tout ce qui touche au broker — le compte actif
+             en haut, la connexion juste dessous. Les deux sujets étaient
+             auparavant entremêlés dans une grille à flux libre, où la carte
+             « Comptes MT5 » (masquée tant qu'aucun compte n'est connecté)
+             faisait sauter les autres cartes d'une colonne à l'autre. -->
+        <div class="settings-col">
+          <div class="chart-card settings-card">
+            <div class="settings-card-heading">
+              <div>
+                <h3>Journal</h3>
+                <div class="metric-sub">Devise d'affichage et listes de saisie.</div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Devise</label>
+              <!-- Correction bug devise : ce champ n'est plus un sélecteur libre.
+                   Choisir une devise d'affichage indépendante du compte n'appliquait
+                   aucune conversion (montants MT5 inchangés, seul le symbole
+                   changeait) — trompeur pour une app financière. La devise
+                   affichée est désormais toujours celle, réelle, du compte MT5
+                   actif (lecture seule ici). -->
+              <input id="set-currency" type="text" readonly disabled title="Devise réelle du compte MT5 connecté (non modifiable)">
+            </div>
+            <div class="settings-list-launcher">
+              <div>
+                <label>Setup et émotions</label>
+                <div class="field-hint">Personnalisez les choix disponibles dans vos trades.</div>
+              </div>
+              <button class="btn-connect" onclick="openSettingsListsModal()">Gérer les listes</button>
+            </div>
+          </div>
+
+          <div class="chart-card settings-card">
+            <div class="settings-card-heading">
+              <div>
+                <h3>Capital de référence</h3>
+                <div class="metric-sub">Base de calcul du drawdown, de la courbe de capital et des R-multiples.</div>
+              </div>
+            </div>
+            <div class="metric-sub" id="ref-capital-note">Il est figé une fois pour toutes à la première synchronisation de votre compte MT5 — il ne bouge plus tout seul.</div>
+            <div class="settings-block">
+              <label id="ref-capital-label">Capital de référence actuel</label>
+              <div id="ref-capital-value" class="metric-sub" style="margin:4px 0 10px">—</div>
+              <!-- Recalibrage : propre aux comptes MT5 (masqué pour un compte manuel, dont le capital se recalcule seul). -->
+              <div id="ref-capital-recalibrate">
+              <button class="btn-reset" onclick="recalibrateCapital()">Recalibrer le capital de référence</button>
+              <div class="metric-sub" style="margin-top:8px">À utiliser après une suppression de trade (ex. trade de test) : recalcule le capital de référence à partir du solde actuel et du P&amp;L déjà réalisé sur ce compte.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Journal des mouvements de capital (dépôts / retraits, phase 6).
+               Comptes MT5 : lecture seule, alimenté par la synchro. Comptes
+               manuels : saisie + suppression. Rempli par js/movements.js. -->
+          <div class="chart-card settings-card" id="movements-card" style="display:none">
+            <div class="settings-card-heading">
+              <div>
+                <h3>Mouvements de capital</h3>
+                <div class="metric-sub" id="movements-note">Dépôts et retraits : ils font varier le capital, jamais la performance (ni P&amp;L, ni drawdown).</div>
+              </div>
+            </div>
+            <div class="settings-stats">
+              <div><div class="side-stat-label">Dépôts</div><div class="side-stat-value" id="mv-total-deposits">—</div></div>
+              <div><div class="side-stat-label">Retraits</div><div class="side-stat-value" id="mv-total-withdrawals">—</div></div>
+              <div><div class="side-stat-label">Net</div><div class="side-stat-value" id="mv-total-net">—</div></div>
+            </div>
+            <div id="movements-form" style="display:none;margin-top:12px">
+              <div class="modal-fields-grid">
+                <div class="field"><label for="mv-type">Type</label>
+                  <select id="mv-type"><option value="deposit">Dépôt</option><option value="withdrawal">Retrait</option></select>
+                </div>
+                <div class="field"><label for="mv-amount">Montant</label><input id="mv-amount" type="number" step="any" min="0" placeholder="100"></div>
+              </div>
+              <div class="modal-fields-grid">
+                <div class="field"><label for="mv-time">Date et heure</label><input id="mv-time" type="datetime-local"></div>
+                <div class="field"><label for="mv-comment">Commentaire (optionnel)</label><input id="mv-comment" type="text" maxlength="255" placeholder="Recharge, retrait mensuel…"></div>
+              </div>
+              <button class="btn-connect" id="mv-add-btn" onclick="addCapitalMovement()">Ajouter</button>
+            </div>
+            <div id="movements-list" style="margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div class="settings-col">
+          <div class="chart-card settings-card settings-account-card" id="account-card" style="display:none">
+            <div class="settings-card-heading">
+              <div>
+                <h3>Comptes</h3>
+                <div class="metric-sub">Basculez entre vos comptes enregistrés ou ajoutez-en un nouveau (MT5, manuel avec import, full manuel).</div>
+              </div>
+              <div class="settings-card-heading-actions">
+                <!-- Reconnexion strictement manuelle (voir state.reconnect_active_account
+                     côté backend) : fermer MT5 volontairement ne doit plus jamais le
+                     rouvrir tout seul — ce bouton est désormais le seul déclencheur, avec
+                     le clic sur le compte actif dans le sélecteur ci-dessous quand il
+                     apparaît déconnecté. -->
+                <button type="button" class="btn-relaunch-mt5" id="btn-relaunch-mt5" onclick="reconnectMT5()" title="Retente la connexion au compte actif">⟳ Relancer MT5</button>
+                <span class="settings-card-icon" id="account-card-icon">MT5</span>
+              </div>
+            </div>
+            <div class="account-switcher" id="account-switcher"></div>
+            <div class="settings-stats">
+              <div><div class="side-stat-label">Solde</div><div class="side-stat-value" id="acc-balance">—</div></div>
+              <div><div class="side-stat-label">Équité</div><div class="side-stat-value" id="acc-equity">—</div></div>
+              <div id="acc-margin-stat"><div class="side-stat-label">Marge libre</div><div class="side-stat-value" id="acc-margin">—</div></div>
+            </div>
+          </div>
+
+          <div class="connect-card settings-connection-card">
+            <h3 class="connect-card-head">
+              <span>Connexion MT5</span>
+              <button class="card-collapse-btn" id="connect-toggle-btn" onclick="toggleConnectCard()" title="Afficher / masquer">▾</button>
+            </h3>
+            <div id="connect-card-body">
+              <div class="field"><label>Login</label><input id="inp-login" type="number" placeholder="12345678"></div>
+              <div class="field"><label>Mot de passe</label><input id="inp-pass" type="password" placeholder="••••••••"></div>
+              <div class="field"><label>Serveur</label><input id="inp-server" maxlength="100" placeholder="ICMarkets-Demo"></div>
+              <div class="field"><label>Nom du compte (optionnel)</label><input id="inp-label" maxlength="50" placeholder="Compte principal"></div>
+              <button class="btn-connect" onclick="connectMT5()">Connecter</button>
+              <div class="metric-sub" style="margin-top:6px">Jusqu'à 4 comptes peuvent être enregistrés.</div>
+              <div class="status-pill"><div class="dot" id="status-dot"></div><span id="status-text">Non connecté</span></div>
+              <div id="demo-warning" style="display:none;margin-top:8px;font-size:11px;color:var(--amber);font-family:var(--mono);line-height:1.4;">
+                ⚠ Mode simulation — la librairie MetaTrader5 n'est pas installée, ces données sont fictives et ne reflètent pas un vrai compte.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div id="settings-lists-modal" class="modal-overlay" data-no-dismiss="true" style="display:none">
+  <div class="modal-box modal-box-lists">
+    <div class="view-head">
+      <div class="view-head-title">Types de setup, erreurs et émotions</div>
+      <button class="close-x" onclick="closeSettingsListsModal()">✕</button>
+    </div>
+    <!-- Corps défilant séparé de l'en-tête : sur un petit écran, la modale
+         entière dépassait la hauteur de la fenêtre (trois listes pouvant
+         chacune aller jusqu'à 260px, plus les champs d'ajout) et, centrée
+         par le fond, débordait aussi bien en haut qu'en bas — le bouton ✕
+         se retrouvait au-dessus du haut visible, donc impossible à
+         atteindre sans deviner qu'il fallait remonter le défilement. La
+         boîte a désormais une hauteur maximale fixe ; seul ce corps défile,
+         l'en-tête et son ✕ restent toujours visibles. -->
+    <div class="managed-lists-body">
+      <div class="managed-lists-grid">
+        <section class="managed-list-panel">
+          <h3>Types de setup</h3>
+          <div class="managed-add"><input id="setup-type-input" maxlength="30" placeholder="Ex. Pullback"><button type="button" onclick="addManagedValue('setup')">Ajouter</button></div>
+          <div id="setup-types-list" class="managed-list"></div>
+        </section>
+        <section class="managed-list-panel">
+          <h3>Émotions</h3>
+          <div class="managed-add"><input id="emotion-type-input" maxlength="30" placeholder="Ex. Concentré"><button type="button" onclick="addManagedValue('emotion')">Ajouter</button></div>
+          <div id="emotion-types-list" class="managed-list"></div>
+        </section>
+        <section class="managed-list-panel">
+          <h3>Tags erreur</h3>
+          <div class="managed-add"><input id="error-type-input" maxlength="30" placeholder="Ex. Entrée tardive"><button type="button" onclick="addManagedValue('error')">Ajouter</button></div>
+          <div id="error-types-list" class="managed-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirmation de suppression d'un compte MT5 enregistré (correction #4).
+     Une checkbox explicite (décochée par défaut) permet en plus de
+     supprimer les trades de ce compte — irréversible — au lieu du confirm()
+     natif du navigateur, qui ne peut pas porter de case à cocher. -->
+<div id="delete-account-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <div class="view-head">
+      <div class="view-head-title">Retirer ce compte</div>
+      <button class="close-x" onclick="closeDeleteAccountModal()">✕</button>
+    </div>
+    <p id="delete-account-message" style="margin:0 0 14px">Retirer ce compte du sélecteur ? Les identifiants ne seront plus enregistrés.</p>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px">
+      <input type="checkbox" id="chk-delete-trades">
+      <span>Supprimer aussi les trades de ce compte (irréversible)</span>
+    </label>
+    <div class="modal-actions">
+      <button onclick="closeDeleteAccountModal()">Annuler</button>
+      <button class="btn-primary" onclick="confirmDeleteAccount()">Retirer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Choix du mode de démarrage du journal, à faire une fois par compte
+     avant la première synchronisation (voir POST .../initialize côté
+     backend). Seul le mode "table rase" est proposé pour l'instant. -->
+<div id="init-journal-modal" class="modal-overlay" data-no-dismiss="true" style="display:none">
+  <div class="modal-box" style="max-width:440px">
+    <div class="view-head">
+      <div class="view-head-title">Initialisation du journal</div>
+    </div>
+    <p style="margin:0 0 14px">Comment voulez-vous commencer avec ce compte ?</p>
+    <div id="init-journal-summary" style="margin:0 0 16px;font-size:var(--fs-sm);color:var(--muted)"></div>
+
+    <div class="modal-actions" style="flex-direction:column;align-items:stretch;gap:6px;margin-bottom:18px">
+      <button class="btn-primary" onclick="initializeJournalFromNow()">
+        Commencer maintenant, à l'état actuel
+      </button>
+      <p style="margin:0;font-size:var(--fs-sm);color:var(--muted)">
+        Le journal démarre à votre solde et vos positions ouvertes
+        d'aujourd'hui. L'historique des trades déjà clôturés ne sera pas
+        importé.
+      </p>
+    </div>
+
+    <div style="border-top:1px solid var(--border2);padding-top:14px">
+      <label style="display:block;font-size:var(--fs-sm);color:var(--muted);margin-bottom:6px">
+        Ou importer l'historique depuis une date :
+      </label>
+      <div style="display:flex;gap:8px">
+        <input type="date" id="init-history-date" style="flex:1">
+        <button onclick="initializeJournalHistorical()">Importer</button>
+      </div>
+      <p style="margin:6px 0 0;font-size:var(--fs-sm);color:var(--muted)">
+        Tous les trades clôturés depuis cette date seront importés, en plus
+        des positions déjà ouvertes.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Écran d'accueil : comment alimenter le journal ? Affiché automatiquement
+     tant qu'aucun compte n'existe, et via le « + » du sélecteur de comptes.
+     Les deux choix « manuel » créent le MÊME type de compte (mode = manual) ;
+     seule la porte d'entrée diffère. -->
+<div id="welcome-modal" class="modal-overlay" style="display:none">
+  <div class="modal-box modal-box-welcome">
+    <div class="view-head">
+      <div class="view-head-title">Ajouter un compte au journal</div>
+      <button class="close-x" onclick="closeWelcomeModal()" aria-label="Fermer">✕</button>
+    </div>
+    <p style="margin:0 0 14px;color:var(--muted)">Comment voulez-vous alimenter ce journal ?</p>
+    <div class="welcome-choices">
+      <button type="button" class="welcome-choice" id="welcome-choice-mt5" onclick="chooseWelcomeOption('mt5')">
+        <span class="welcome-choice-icon" aria-hidden="true">⟳</span>
+        <span class="welcome-choice-title">Connecter MT5</span>
+        <span class="welcome-choice-desc">Vos trades sont synchronisés automatiquement depuis MetaTrader 5 (login, mot de passe, serveur).</span>
+      </button>
+      <button type="button" class="welcome-choice" id="welcome-choice-import" onclick="chooseWelcomeOption('import')">
+        <span class="welcome-choice-icon" aria-hidden="true">⭱</span>
+        <span class="welcome-choice-title">Compte manuel (import)</span>
+        <span class="welcome-choice-desc">Importez un rapport d'historique MT5 (HTML, xlsx) ou un CSV, puis ajoutez ou corrigez des trades à la main.</span>
+      </button>
+      <button type="button" class="welcome-choice" id="welcome-choice-manual" onclick="chooseWelcomeOption('manual')">
+        <span class="welcome-choice-icon" aria-hidden="true">✎</span>
+        <span class="welcome-choice-title">Full manuel</span>
+        <span class="welcome-choice-desc">Vous indiquez un capital de départ, puis saisissez tous vos trades à la main.</span>
+      </button>
+    </div>
+    <div class="field-hint" style="margin-top:12px">Jusqu'à 4 comptes peuvent être enregistrés (tous types confondus). Les trades saisis ou importés restent dans des comptes séparés de vos comptes MT5 synchronisés.</div>
+  </div>
+</div>
+
+<!-- Création d'un compte MANUEL « full manuel » (aucune connexion MT5) : nom,
+     devise, capital de départ, date de début. Atteinte depuis l'écran
+     d'accueil (#welcome-modal). L'import de fichier passe par #import-modal. -->
+<div id="manual-account-modal" class="modal-overlay" data-no-dismiss="true" style="display:none">
+  <div class="modal-box" style="max-width:420px">
+    <h3>Full manuel — nouveau compte</h3>
+    <div class="field"><label>Nom du compte</label><input id="man-name" type="text" maxlength="50" placeholder="Compte manuel"></div>
+    <div class="modal-fields-grid">
+      <div class="field"><label>Devise</label><input id="man-currency" type="text" maxlength="10" value="USD"></div>
+      <div class="field"><label>Capital de départ</label><input id="man-balance" type="number" step="any" min="0" placeholder="1000"></div>
+    </div>
+    <div class="modal-fields-grid">
+      <div class="field"><label>Date de début (optionnelle)</label><input id="man-start" type="date"></div>
+      <div class="field"><label>Levier</label><input id="man-leverage" type="number" min="1" max="3000" step="1" value="100"></div>
+    </div>
+    <div class="field-hint">Ce compte n'utilise pas MetaTrader 5 : vous saisissez vos trades à la main. Le capital est le capital de départ + dépôts − retraits + résultat net (profit + commission + swap) des trades clôturés. Le levier sert à estimer la marge (charge du dépôt) des trades saisis sans marge.</div>
+    <div class="modal-actions">
+      <button onclick="closeManualAccountModal()">Annuler</button>
+      <button class="btn-primary" id="man-submit" onclick="createManualAccount()">Créer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assistant d'import (étape 4) : CSV générique (avec correspondance de
+     colonnes) ou rapport MT5 (HTML/xlsx), lu directement par nom d'en-tête
+     côté backend (services/import_parsers.py). Trois écrans dans une seule
+     modale, affichés/masqués par import.js : fichier → mapping (CSV
+     seulement) → aperçu + confirmation. -->
+<div id="import-modal" class="modal-overlay" data-no-dismiss="true" style="display:none">
+  <div class="modal-box modal-box-import">
+    <h3>Importer des trades</h3>
+
+    <div id="import-step-file">
+      <div class="field-hint" id="import-target-hint" style="margin:0 0 10px"></div>
+      <div class="field">
+        <label>Fichier</label>
+        <input id="import-file-input" type="file" accept=".csv,.html,.htm,.xlsx">
+      </div>
+      <div class="field-hint">Formats acceptés : export CSV générique (avec correspondance de colonnes à l'étape suivante), ou rapport d'historique MetaTrader 5 (.html ou .xlsx).</div>
+      <div id="import-error" class="field-hint" style="display:none;color:var(--danger,#c0392b)"></div>
+      <div class="modal-actions">
+        <button onclick="closeImportModal()">Annuler</button>
+        <button class="btn-primary" id="import-analyze-btn" onclick="analyzeImportFile()">Analyser</button>
+      </div>
+      <!-- Imports déjà réalisés dans le compte manuel actif : chacun peut être
+           annulé en bloc (DELETE /api/import/batch/{id}). Rempli par import.js. -->
+      <div id="import-batches-section" style="display:none;border-top:1px solid var(--border2);margin-top:16px;padding-top:12px">
+        <div class="view-section-title" style="margin-top:0">Imports précédents</div>
+        <div id="import-batches-list"></div>
+      </div>
+    </div>
+
+    <div id="import-step-mapping" style="display:none">
+      <div class="field-hint">Indiquez à quelle colonne de votre fichier correspond chaque champ (symbole, sens, volume, prix et heure d'ouverture sont obligatoires).</div>
+      <div id="import-mapping-fields" style="max-height:340px;overflow:auto"></div>
+      <div class="modal-actions">
+        <button onclick="backToImportFile()">Retour</button>
+        <button class="btn-primary" onclick="applyImportMapping()">Continuer</button>
+      </div>
+    </div>
+
+    <div id="import-step-preview" style="display:none">
+      <div id="import-summary" class="field-hint"></div>
+      <div id="import-integrity"></div>
+      <div id="import-account-section"></div>
+      <!-- Dépôts / retraits détectés dans le rapport (phase 6). Rempli par import.js. -->
+      <div id="import-movements-section" style="display:none;margin-top:8px">
+        <div class="view-section-title" style="margin-top:0">Dépôts et retraits détectés</div>
+        <div id="import-movements-list" style="max-height:140px;overflow:auto"></div>
+      </div>
+      <div style="max-height:320px;overflow:auto;margin-top:8px">
+        <table class="trade-table" id="import-preview-table">
+          <thead><tr><th>Repère</th><th>Symbole</th><th>Sens</th><th>Volume</th><th>Ouverture</th><th>Clôture</th><th>Profit</th><th>Statut</th></tr></thead>
+          <tbody id="import-preview-body"></tbody>
+        </table>
+      </div>
+      <div class="modal-actions">
+        <button onclick="closeImportModal()">Annuler</button>
+        <button class="btn-primary" id="import-commit-btn" onclick="confirmImportCommit()">Importer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Fiche de trade : VISIONNAGE (lecture seule stricte, aucune écriture). -->
+<div id="view-modal" class="modal-overlay" data-no-overlay-dismiss="true" style="display:none">
+  <div class="modal-box modal-box-view">
+    <div class="view-head">
+      <div>
+        <div class="view-head-title" id="view-modal-title">Trade</div>
+        <div id="view-modal-source" class="view-head-source"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="view-head-pnl" id="view-modal-pnl">—</div>
+        <button class="close-x" onclick="closeViewModal()">✕</button>
+      </div>
+    </div>
+
+    <div class="view-section-title">Détails du trade</div>
+    <div class="view-grid" id="view-trade-grid"></div>
+
+    <div class="view-section-title">Tags &amp; contexte</div>
+    <div class="view-grid" id="view-tags-grid"></div>
+
+    <div class="view-section-title">Note</div>
+    <div id="view-note-box" class="view-note-box view-note-empty">—</div>
+
+    <div class="view-section-title">Pièces jointes</div>
+    <div class="attach-grid" id="view-attach-grid"></div>
+
+    <div class="modal-actions">
+      <button onclick="closeViewModal()">Fermer</button>
+      <button class="btn-primary" onclick="editFromView()">✎ Modifier</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fiche de modification : TOUTES les écritures sur le trade (tags,
+     contexte, note, ajout/suppression de pièces jointes). -->
+<div id="edit-modal" class="modal-overlay" data-no-dismiss="true" style="display:none">
+
+  <div class="modal-box modal-box-lg">
+    <h3 id="edit-modal-title">Modifier le trade</h3>
+
+    <!-- Données du trade : éditables uniquement sur un trade manuel/importé
+         (et à la création). Masquées pour un trade MT5, dont les prix,
+         volume et dates restent ceux du broker. -->
+    <div id="edit-data-section" style="display:none">
+      <div class="view-section-title">Données du trade</div>
+      <div class="modal-fields-grid">
+        <div class="field"><label>Symbole</label><input id="inp-symbol" type="text" maxlength="20" placeholder="EURUSD" autocapitalize="characters"></div>
+        <div class="field"><label>Sens</label>
+          <select id="inp-direction"><option value="buy">Achat</option><option value="sell">Vente</option></select>
+        </div>
+        <div class="field"><label>Ouverture</label><input id="inp-open-time" type="datetime-local" step="1"></div>
+        <div class="field"><label>Clôture (vide = trade ouvert)</label><input id="inp-close-time" type="datetime-local" step="1"></div>
+        <div class="field"><label>Prix d'ouverture</label><input id="inp-open-price" type="number" step="any" min="0"></div>
+        <div class="field"><label>Prix de clôture</label><input id="inp-close-price" type="number" step="any" min="0"></div>
+        <div class="field"><label>Volume (lots)</label><input id="inp-volume" type="number" step="any" min="0"></div>
+        <div class="field"><label>Profit</label><input id="inp-profit" type="number" step="any" placeholder="0"></div>
+        <div class="field"><label>Stop Loss</label><input id="inp-sl" type="number" step="any" min="0"></div>
+        <div class="field"><label>Take Profit</label><input id="inp-tp" type="number" step="any" min="0"></div>
+        <div class="field"><label>Commission</label><input id="inp-commission" type="number" step="any" placeholder="0"></div>
+        <div class="field"><label>Swap</label><input id="inp-swap" type="number" step="any" placeholder="0"></div>
+        <div class="field"><label>Marge (facultative)</label><input id="inp-margin" type="number" step="any" min="0" placeholder="auto"></div>
+      </div>
+      <div class="field-hint" id="edit-data-hint" style="margin-bottom:10px">Heures saisies telles quelles (heure serveur du broker), sans conversion de fuseau. Le profit est saisi tel qu'affiché par votre plateforme ; pips, risque et R-multiple sont calculés automatiquement.</div>
+      <div class="view-section-title">Journal</div>
+    </div>
+
+    <div class="modal-fields-grid">
+      <div class="field">
+        <label>Tag setup</label>
+        <select id="inp-setup-tag">
+          <option value="">—</option>
+          <option value="breakout">Breakout</option>
+          <option value="pullback">Pullback</option>
+          <option value="news">News</option>
+          <option value="range">Range</option>
+          <option value="autre">Autre</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Tag erreur</label>
+        <select id="inp-error-tag"><option value="">—</option></select>
+      </div>
+      <div class="field">
+        <label>Émotion</label>
+        <select id="inp-emotion">
+          <option value="">—</option>
+          <option value="calme">Calme</option>
+          <option value="stresse">Stressé</option>
+          <option value="confiant">Confiant</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Playbook / stratégie</label>
+          <input id="inp-playbook" type="text" maxlength="50" placeholder="ex: SND">
+      </div>
+      <div class="field">
+        <label>Raison de sortie</label>
+        <select id="inp-exit-reason">
+          <option value="">—</option>
+          <option value="StopLoss">Stop Loss</option>
+          <option value="TakeProfit">Take Profit</option>
+          <option value="Manuel">Manuel</option>
+          <option value="Breakeven">Breakeven</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Timeframe d'entrée</label>
+        <select id="inp-entry-timeframe">
+          <option value="">—</option>
+          <option value="1m">1m</option>
+          <option value="5m">5m</option>
+          <option value="15m">15m</option>
+          <option value="30m">30m</option>
+          <option value="1h">1h</option>
+          <option value="4h">4h</option>
+          <option value="1D">1D</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Risque (% du capital)</label>
+        <input id="inp-risk-percent" type="number" step="0.01" min="0" max="100" placeholder="Calculé auto. depuis le SL si vide">
+        <div class="field-hint" id="risk-auto-hint" style="display:none"></div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:4px">
+      <label>Note</label>
+      <textarea id="notes-textarea" maxlength="5000" placeholder="Contexte, setup, erreur, ressenti..."></textarea>
+    </div>
+
+    <div id="edit-attach-section">
+    <div class="view-section-title">Pièces jointes</div>
+    <div class="attach-upload-row">
+      <select id="attach-label-select">
+        <option value="avant">Avant</option>
+        <option value="apres">Après</option>
+        <option value="autre">Autre</option>
+      </select>
+      <input type="file" id="attach-file-input" accept="image/png,image/jpeg,image/webp,image/gif">
+      <button class="btn-sync" onclick="uploadAttachment()">+ Ajouter</button>
+    </div>
+    <div class="attach-grid" id="edit-attach-grid"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button onclick="closeEditModal()">Annuler</button>
+      <button class="btn-primary" onclick="saveNotes()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Fermeture des fenêtres modales ───────────────────────────────────────────
+// Chaque modale avait son propre bouton « Annuler » et rien d'autre : ni
+// Échap, ni clic sur le fond. Deux gestes que tout le monde tente en premier.
+// Traité ici en délégation, une fois pour toutes, plutôt que branché modale
+// par modale — les futures en héritent sans code supplémentaire.
+(function() {
+  function visibleOverlays() {
+    // Correction : le test précédent était `offsetParent !== null`. Or toutes
+    // ces couches sont en `position:fixed`, et `offsetParent` vaut TOUJOURS
+    // null pour un élément fixe — la liste revenait donc vide en toutes
+    // circonstances, et la touche Échap ne fermait en réalité aucune modale.
+    // On teste la propriété qui pilote réellement l'affichage ici.
+    return Array.from(document.querySelectorAll('.modal-overlay, .attach-lightbox'))
+      .filter(function(el) { return getComputedStyle(el).display !== 'none'; });
+  }
+
+  function dismiss(overlay) {
+    if (!overlay) return;
+    // Correction : Échap et le clic sur le fond fermaient N'IMPORTE QUELLE
+    // modale, y compris la fiche de modification (tags, note, pièces
+    // jointes) — un geste réflexe suffisait à perdre une saisie pas encore
+    // enregistrée. Ces modales sont marquées `data-no-dismiss` : elles ne se
+    // ferment plus que par leur propre bouton (« Annuler »/« Enregistrer »,
+    // ou un choix explicite pour l'initialisation du journal), jamais par
+    // Échap ni par un clic à l'extérieur.
+    if (overlay.dataset && overlay.dataset.noDismiss === 'true') return;
+    // La visionneuse d'image est créée à la volée : elle se retire du DOM.
+    if (overlay.classList.contains('attach-lightbox')) { overlay.remove(); return; }
+    if (overlay.id === 'view-modal' && window.closeViewModal) { window.closeViewModal(); return; }
+    overlay.style.display = 'none';
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var open = visibleOverlays();
+    if (!open.length) return;
+    // La dernière ouverte est celle qui se ferme (fiche « voir » ouverte
+    // sous la fiche « modifier », par exemple).
+    dismiss(open[open.length - 1]);
+  });
+
+  document.addEventListener('mousedown', function(e) {
+    // Uniquement le fond lui-même : un clic à l'intérieur de la boîte ne doit
+    // jamais fermer, y compris en relâchant la souris hors de la boîte après
+    // avoir sélectionné du texte.
+    if (!e.target.classList || !e.target.classList.contains('modal-overlay')) return;
+    // Correction : la fiche de visionnage se refermait au moindre clic à côté
+    // de la boîte. Sur une fiche qu'on parcourt — on lit la note, on ouvre une
+    // capture, on revient — ce geste est trop facile à déclencher par
+    // inadvertance, et il faut rouvrir le trade depuis la liste pour reprendre
+    // la lecture. `data-no-overlay-dismiss` neutralise le clic extérieur SANS
+    // toucher à Échap : la fiche reste fermable au clavier, par le ✕ et par
+    // « Fermer ». À distinguer de `data-no-dismiss` (fiche de modification),
+    // qui bloque les deux gestes parce qu'une saisie non enregistrée s'y perd.
+    if (e.target.dataset && e.target.dataset.noOverlayDismiss === 'true') return;
+    dismiss(e.target);
+  });
+})();
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

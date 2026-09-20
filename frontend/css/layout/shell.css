@@ -1,0 +1,25 @@
+/* Ossature de page : grille sidebar/contenu. Le détail visuel de la
+   sidebar (logo, navigation...) vit dans components/sidebar.css ; ce
+   fichier ne porte que la structure. */
+
+  /* Cible minimale : desktop 1360×768. La sidebar (220px) + le padding de
+     .main ci-dessus laissent ~1076px de large pour le contenu à 1360px —
+     c'est ce budget qui dimensionne .trade-row et les grilles ci-dessous. */
+
+  /* Layout : la sidebar reste fixe, seule la zone de contenu (.main)
+     défile. .shell prend exactement la hauteur de la fenêtre et ne
+     scrolle jamais lui-même ; chaque colonne gère son propre scroll. */
+   .shell { display:grid; grid-template-columns:220px minmax(0,1fr); height:100vh; overflow:hidden; }
+
+   .sidebar { min-width:0; background:var(--surface); border-right:1px solid var(--border); padding:20px 0; display:flex; flex-direction:column; height:100vh; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; transition:background var(--t), border-color var(--t); }
+   .main { min-width:0; padding:22px 26px; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; height:100vh; }
+
+
+@media (max-width:900px) {
+   .shell { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); }
+   .sidebar { height:auto; max-height:46vh; padding:16px 0 10px; border-right:none; border-bottom:1px solid var(--border); }
+   .main { height:auto; min-height:0; padding:16px; }
+}
+@media (max-width:520px) {
+   .sidebar { max-height:44vh; }
+}

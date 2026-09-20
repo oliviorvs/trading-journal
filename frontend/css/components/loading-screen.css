@@ -1,0 +1,24 @@
+  /* Intro courte affichée avant le verrou local. La barre et le tracé
+     utilisent la même couleur d'accent que le reste de l'application. */
+  .loading-screen { position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--text-title); opacity:1; transition:opacity .45s ease; }
+  .loading-screen.is-hidden { opacity:0; pointer-events:none; }
+  .loading-inner { width:min(360px,calc(100% - 48px)); text-align:center; animation:loading-rise .8s ease both; }
+  .loading-mark { position:relative; width:58px; height:58px; margin:0 auto 24px; border:1px solid var(--accent); border-radius:50%; animation:loading-pulse 1.4s ease-in-out infinite; }
+  .loading-mark:before, .loading-mark:after, .loading-mark span { content:''; position:absolute; display:block; }
+  .loading-mark:before { left:14px; right:14px; bottom:13px; height:1px; background:var(--border2); }
+  .loading-mark:after { left:13px; top:15px; width:31px; height:23px; border-top:2px solid var(--accent); transform:skewY(-28deg) rotate(-18deg); }
+  .loading-mark span { right:8px; top:10px; width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 14px var(--accent); }
+  .loading-title { font-family:var(--display); font-size:clamp(25px,5vw,34px); font-weight:700; letter-spacing:-.5px; }
+  .loading-title em { color:var(--accent); font-style:normal; }
+  .loading-track { height:3px; border-radius:1px; margin:27px auto 13px; overflow:hidden; background:var(--border); }
+  /* La barre n'est plus une animation de 5 s décorrélée du réel : sa
+     progression est pilotée en JS au fil des étapes réellement franchies
+     (voir le contrôleur window.tjBoot dans index.html). */
+  .loading-progress { width:100%; height:100%; background:var(--primary); transform:scaleX(0); transform-origin:left; transition:transform .3s cubic-bezier(.65,0,.35,1); }
+  .loading-progress.is-error { background:var(--neg); }
+  .loading-caption { color:var(--muted); font:var(--fs-2xs) var(--mono); letter-spacing:1.5px; }
+  /* Nom de l'étape/fonction en cours, sous la barre de progression. */
+  .loading-step { margin-top:7px; min-height:14px; color:var(--muted); font:var(--fs-2xs) var(--mono); letter-spacing:.3px; opacity:.7; transition:opacity .2s; }
+  .loading-step.is-error { color:var(--neg); opacity:1; }
+  @keyframes loading-rise { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes loading-pulse { 50% { box-shadow:0 0 0 8px var(--accent-dim); } }

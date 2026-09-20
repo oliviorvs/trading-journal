@@ -1,0 +1,64 @@
+  /* Écran de bienvenue / verrouillage par code d'accès -------------------
+     Masqué par défaut ; affiché tant que <html> n'a pas la classe
+     tj-unlocked (posée par le script de vérification du code, voir
+     index.html). Empêche tout flash de contenu : le CSS est chargé avant
+     que le corps ne soit peint, donc .shell reste caché dès le départ. */
+  html:not(.tj-unlocked) .shell { display:none; }
+  html.tj-unlocked #access-gate { display:none; }
+   #access-gate { position:fixed; inset:0; z-index:1000; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:32px; overflow:auto; }
+   .gate-layout { width:min(1080px,100%); min-height:620px; display:grid; grid-template-columns:1.3fr .7fr; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow-lg); overflow:hidden; }
+   .gate-intro { position:relative; overflow:hidden; padding:54px 58px 42px; background:linear-gradient(135deg,var(--surface) 0%,var(--bg) 100%); border-right:1px solid var(--border); }
+   .gate-intro:after { content:''; position:absolute; width:380px; height:380px; right:-170px; top:-130px; border:1px solid var(--primary); border-radius:var(--radius-lg); opacity:.2; transform:rotate(35deg); }
+   .gate-brand { position:relative; z-index:1; display:flex; align-items:center; gap:9px; color:var(--text-title); font-size:var(--fs-md); font-weight:600; letter-spacing:.3px; }
+   .brand-logo { width:32px; height:32px; flex:0 0 32px; object-fit:cover; border-radius:1px; border:1px solid var(--border2); }
+   .gate-kicker { margin-top:102px; color:var(--accent); font-family:var(--mono); font-size:var(--fs-xs); letter-spacing:1.8px; text-transform:uppercase; }
+   .gate-intro h2 { max-width:590px; margin:15px 0 18px; color:var(--text-title); font-size:clamp(30px,4vw,48px); font-weight:700; line-height:1.08; letter-spacing:-1px; }
+   .gate-intro h2 em { color:var(--accent); font-style:normal; }
+   .gate-intro-copy { max-width:470px; color:var(--muted); font-size:var(--fs-md); line-height:1.65; }
+   .gate-points { display:grid; gap:13px; margin-top:35px; max-width:480px; }
+   .gate-points div { display:flex; align-items:center; gap:13px; color:var(--text); font-size:var(--fs-sm); }
+   .point-mark { color:var(--accent); font-family:var(--mono); font-size:var(--fs-2xs); }
+   .gate-chart { position:absolute; right:50px; bottom:43px; width:220px; height:70px; border-bottom:1px solid var(--border2); background:repeating-linear-gradient(0deg,transparent 0,transparent 22px,rgba(128,128,128,.1) 23px); }
+   .chart-line { position:absolute; inset:11px 0 0; background:linear-gradient(145deg,transparent 0 9%,var(--accent) 9.5% 10%,transparent 10.5% 25%,var(--accent) 25.5% 26%,transparent 26.5% 39%,var(--accent) 39.5% 40%,transparent 40.5% 52%,var(--accent) 52.5% 53%,transparent 53.5% 69%,var(--accent) 69.5% 70%,transparent 70.5%); clip-path:polygon(0 72%,12% 62%,23% 68%,35% 42%,46% 54%,57% 31%,68% 40%,79% 14%,90% 27%,100% 0,100% 7%,90% 34%,79% 21%,68% 47%,57% 38%,46% 61%,35% 49%,23% 75%,12% 69%,0 79%); }
+   .chart-label { position:absolute; bottom:-21px; color:var(--muted); font:var(--fs-2xs) var(--mono); }
+   .chart-label-start { left:0; } .chart-label-end { right:0; }
+   .gate-box { align-self:center; width:auto; max-width:100%; margin:42px; background:var(--surface); padding:0; text-align:left; }
+   .gate-box-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:42px; color:var(--muted); font:var(--fs-2xs) var(--mono); letter-spacing:1px; }
+   .gate-status { color:var(--pos); } .gate-status i { display:inline-block; width:6px; height:6px; margin-right:5px; border-radius:50%; background:var(--pos); }
+   .gate-logo { font-family:var(--display); font-size:28px; font-weight:700; letter-spacing:-.5px; color:var(--text-title); margin-bottom:8px; }
+   .gate-sub { font-size:var(--fs-sm); color:var(--muted); margin-bottom:28px; line-height:1.5; }
+  .gate-box .field { text-align:left; margin-bottom:12px; }
+  .gate-forgot { margin-top:14px; font-size:var(--fs-xs); color:var(--muted); text-decoration:underline; cursor:pointer; }
+  .gate-error { margin-top:12px; font-size:var(--fs-xs); color:var(--neg); }
+   .gate-box .btn-connect { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; }
+   .gate-box .btn-connect span { font-size:18px; }
+   .gate-box-foot { display:flex; justify-content:space-between; margin-top:52px; padding-top:14px; border-top:1px solid var(--border); color:var(--muted); font:10px var(--mono); text-transform:uppercase; letter-spacing:.5px; }
+   .gate-back { margin-top:14px; font-size:var(--fs-xs); color:var(--muted); text-decoration:underline; cursor:pointer; }
+   .recovery-title { margin-bottom:8px; color:var(--text-title); font-size:var(--fs-md); font-weight:600; }
+   .recovery-copy { margin-bottom:16px; color:var(--muted); font-size:var(--fs-sm); line-height:1.5; }
+   .recovery-code { padding:14px 8px; border:1px solid var(--primary); border-radius:var(--radius); background:var(--primary-soft); color:var(--accent); font:600 var(--fs-md) var(--mono); letter-spacing:1px; text-align:center; }
+   .recovery-copy-btn { width:100%; margin-top:8px; padding:8px; border:1px solid var(--border2); border-radius:var(--radius); background:transparent; color:var(--muted); font-family:var(--display); font-weight:600; cursor:pointer; transition:color var(--t), border-color var(--t); }
+   .recovery-copy-btn:hover { color:var(--accent); border-color:var(--accent); }
+   .gate-loading { display:flex; flex-direction:column; align-items:flex-start; gap:14px; padding:20px 0; }
+   .gate-loading .loading-spinner { width:20px; height:20px; }
+   .gate-offline { padding:8px 0 4px; }
+   .gate-offline .btn-connect { margin-top:16px; }
+
+@media (max-width:900px) {
+   #access-gate { align-items:flex-start; padding:16px; }
+   .gate-layout { min-height:0; grid-template-columns:1fr; }
+   .gate-intro { min-height:470px; padding:34px 28px; border-right:none; border-bottom:1px solid var(--border); }
+   .gate-kicker { margin-top:70px; }
+   .gate-intro h2 { font-size:clamp(30px,8vw,44px); }
+   .gate-chart { right:28px; bottom:34px; }
+   .gate-box { margin:32px 28px 36px; }
+   .gate-box-top { margin-bottom:30px; }
+}
+@media (max-width:520px) {
+   .gate-intro { min-height:510px; }
+   .gate-intro-copy { font-size:var(--fs-base); }
+   .gate-points { margin-top:25px; }
+   .gate-chart { left:28px; right:28px; width:auto; }
+   .gate-box { margin:28px 20px 30px; }
+   .gate-box-foot { margin-top:40px; }
+}

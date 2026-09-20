@@ -1,0 +1,54 @@
+  /* Filters */
+  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:16px; }
+  /* Segment de période : l'option retenue est un aplat plein de la couleur
+     de marque — c'est le seul endroit du tableau de bord où le bleu est
+     saturé, pour qu'on sache immédiatement ce qu'on regarde. */
+  .filter-btn { font-size:var(--fs-sm); font-weight:600; padding:7px 15px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface); color:var(--muted); cursor:pointer; transition:color var(--t), border-color var(--t), background var(--t); }
+  .filter-btn:hover { border-color:var(--border2); color:var(--text); }
+  .filter-btn.active { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .filter-btn.active:hover { background:var(--primary-hover); border-color:var(--primary-hover); color:var(--on-primary); }
+
+  /* Trade filters bar (symbole / sens / résultat / dates) */
+   .trade-filters { display:flex; gap:12.8px; flex-wrap:wrap; align-items:flex-end; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); padding:14.4px; margin-bottom:13px; }
+   .filter-field { min-width:0; }
+  .filter-field { display:flex; flex-direction:column; gap:6px; }
+  .filter-field label { font-size:var(--fs-2xs); font-weight:600; text-transform:uppercase; letter-spacing:.7px; color:var(--muted); font-family:var(--font); }
+  .filter-field select, .filter-field input[type=date] { background:var(--surface-2); border:1px solid var(--border2); color:var(--text); padding:8px 11px; border-radius:var(--radius); font-family:var(--font); font-size:var(--fs-base); min-width:140px; outline:none; transition:border-color var(--t), box-shadow var(--t); }
+  .filter-field select:focus, .filter-field input[type=date]:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  .btn-reset { align-self:flex-end; background:transparent; border:1px solid var(--border2); color:var(--text); padding:9px 16px; border-radius:var(--radius); font-size:var(--fs-base); font-weight:600; cursor:pointer; transition:color var(--t), border-color var(--t), background var(--t); }
+  .btn-reset:hover { border-color:var(--accent); color:var(--accent); background:var(--primary-soft); }
+
+  /* Sync button */
+  .btn-sync { display:inline-flex; align-items:center; gap:7px; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:7px 14px; border-radius:var(--radius); cursor:pointer; font-size:var(--fs-sm); font-weight:600; transition:color var(--t), border-color var(--t), background var(--t); }
+  .btn-sync:hover { border-color:var(--accent); color:var(--accent); background:var(--primary-soft); }
+
+  /* ── Contrôles de la barre d'en-tête ──────────────────────────────────────
+     Le sélecteur de symbole et le groupe de périodes étaient stylés en
+     attributs `style` dans le HTML : impossible à retoucher globalement, et
+     invisible depuis cette feuille. Ils vivent ici désormais. */
+  .segmented { display:flex; gap:4px; padding:4px; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-2); }
+  .segmented .filter-btn { border-color:transparent; background:transparent; padding:6px 13px; }
+  .segmented .filter-btn:hover { background:var(--surface); }
+  /* Correctif : cette règle ne redéfinissait que la bordure. Le fond
+     transparent de `.segmented .filter-btn` l'emportait sur l'aplat bleu de
+     `.filter-btn.active` (même spécificité, déclarée plus bas), mais la
+     couleur de texte `--on-primary` (blanc) restait, elle : le libellé de la
+     période retenue devenait blanc sur fond clair, donc illisible.
+     Dans un segment, l'option retenue est une pastille de surface — c'est le
+     contraste avec le rail `--surface-2` qui la désigne, pas un aplat. */
+  .segmented .filter-btn.active { background:var(--surface); color:var(--text-title); border-color:var(--border2); box-shadow:var(--card-shadow); }
+  .segmented .filter-btn.active:hover { background:var(--surface); color:var(--text-title); border-color:var(--border2); }
+
+  .select-inline {
+    background:var(--surface); border:1px solid var(--border); color:var(--text);
+    padding:8px 12px; border-radius:var(--radius);
+    font-family:var(--font); font-size:var(--fs-sm); font-weight:500;
+    outline:none; cursor:pointer; transition:border-color var(--t), box-shadow var(--t);
+  }
+  .select-inline:hover { border-color:var(--border2); }
+  .select-inline:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+
+@media (max-width:900px) {
+   .trade-filters { gap:10px; }
+   .filter-field { flex:1 1 140px; }
+}

@@ -1,0 +1,80 @@
+   .period-summary-grid { display:grid; grid-template-columns:repeat(4,minmax(140px,1fr)); gap:10px; margin-bottom:14px; }
+   .period-summary-card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); padding:11.2px 12.8px; }
+   .period-summary-card .metric-value { margin-top:3px; }
+   .period-selection { min-height:44px; display:flex; align-items:center; margin-bottom:14px; padding:10px 14px; border:1px solid var(--border); border-left:3px solid var(--primary); border-radius:var(--radius); background:var(--surface); color:var(--muted); font:var(--fs-sm) var(--mono); }
+   .period-selection.active { color:var(--text); background:var(--primary-soft); }
+   /* Une seule toile, qui occupe la carte : plus de conteneur à débordement
+      horizontal, plus de canvas d'axe Y dupliqué par-dessus (voir period.js).
+      La pagination remplace le défilement. */
+   .period-chart-wrap { position:relative; height:420px; }
+   .period-chart-wrap canvas { display:block; width:100%; height:100%; }
+
+   /* Commandes de pagination, dans l'en-tête de la carte. */
+   .period-pager { display:flex; align-items:center; gap:8px; }
+   .period-pager[hidden] { display:none; }
+   .period-pager-label { color:var(--muted); font:var(--fs-sm) var(--mono); white-space:nowrap; }
+   .period-pager-btn {
+     min-width:30px; padding:5px 10px;
+     background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius);
+     color:var(--text); font-size:var(--fs-sm); font-weight:600; cursor:pointer;
+     transition:color var(--t), border-color var(--t), background var(--t);
+   }
+   .period-pager-btn:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); background:var(--primary-soft); }
+   /* Bouton désactivé : on le laisse visible (il indique qu'on est en début
+      ou en fin d'historique) mais clairement inerte. */
+   .period-pager-btn:disabled { opacity:.4; cursor:default; }
+
+   .period-chart-card .chart-empty { display:none; }
+   .period-chart-card .chart-empty.visible { display:flex; }
+   @media (max-width:700px) {
+      .period-summary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .period-chart-wrap { height:340px; }
+      .period-chart-card .chart-head { flex-wrap:wrap; }
+   }
+   .period-results-card { margin-bottom:14px; }
+   .period-win-rate { color:var(--pos); font:600 var(--fs-xl) var(--mono); font-variant-numeric:tabular-nums; }
+   .period-results-layout { display:grid; grid-template-columns:minmax(180px,260px) minmax(0,1fr); gap:24px; align-items:center; }
+   .period-results-chart-wrap { position:relative; height:190px; }
+   .period-results-legend { display:grid; grid-template-columns:repeat(3,minmax(100px,1fr)); gap:10px; }
+   .period-result-item { border-left:3px solid var(--result-color); border-radius:var(--radius-xs); padding:8px 11px; background:var(--surface-2); }
+   .period-result-label { color:var(--muted); font-size:var(--fs-2xs); font-weight:600; letter-spacing:.7px; text-transform:uppercase; }
+   .period-result-value { color:var(--text-title); font:600 var(--fs-lg) var(--mono); margin-top:3px; }
+   @media (max-width:700px) {
+      .period-results-layout { grid-template-columns:1fr; }
+      .period-results-chart-wrap { max-width:220px; width:100%; margin:auto; }
+      .period-results-legend { grid-template-columns:1fr 1fr; }
+   }
+
+   /* ── Variante colonne latérale du dashboard ───────────────────────────
+      Dans la colonne de droite (300px), la carte n'a plus la place de la
+      grille à trois colonnes : le donut passe à gauche en petit format et
+      la légende s'empile à droite en trois lignes libellé / valeur, comme
+      sur la maquette. Ces règles sont portées par .dashboard-side pour ne
+      pas toucher l'affichage pleine largeur de l'écran « Par période ». */
+   .dashboard-side .period-results-card .chart-head { margin-bottom:12px; }
+   .dashboard-side .period-results-card .period-win-rate { display:none; }
+   .dashboard-side .period-results-layout { grid-template-columns:96px minmax(0,1fr); gap:12px; }
+   .dashboard-side .period-results-chart-wrap { height:96px; }
+   .dashboard-side .period-results-legend { grid-template-columns:1fr; gap:4px; }
+   .dashboard-side .period-result-item {
+      display:flex; align-items:center; justify-content:space-between; gap:8px;
+      background:transparent; padding:4px 0 4px 8px;
+   }
+   .dashboard-side .period-result-label { color:var(--result-color); letter-spacing:.5px; }
+   .dashboard-side .period-result-value { margin-top:0; font-size:var(--fs-base); }
+
+   /* Sous ~1180px la colonne latérale repasse pleine largeur : on rend au
+      bloc sa disposition d'origine. */
+   @media (max-width:1180px) {
+      .dashboard-side .period-results-card .period-win-rate { display:block; }
+      .dashboard-side .period-results-layout { grid-template-columns:minmax(180px,260px) minmax(0,1fr); gap:24px; }
+      .dashboard-side .period-results-chart-wrap { height:190px; }
+      .dashboard-side .period-results-legend { grid-template-columns:repeat(3,minmax(100px,1fr)); gap:10px; }
+      .dashboard-side .period-result-item { display:block; background:var(--surface-2); padding:8px 11px; }
+      .dashboard-side .period-result-label { color:var(--muted); }
+      .dashboard-side .period-result-value { margin-top:3px; font-size:var(--fs-lg); }
+   }
+   @media (max-width:700px) {
+      .dashboard-side .period-results-layout { grid-template-columns:1fr; }
+      .dashboard-side .period-results-legend { grid-template-columns:1fr 1fr; }
+   }

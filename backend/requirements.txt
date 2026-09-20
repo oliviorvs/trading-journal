@@ -1,0 +1,23 @@
+fastapi==0.141.1
+uvicorn[standard]==0.35.0
+pywebview==6.1  # fenêtre native pour launcher.py (app desktop)
+sqlalchemy==2.0.52
+pydantic==2.13.5
+python-multipart==0.0.20
+fpdf2==2.8.7
+matplotlib==3.10.8
+Pillow==11.3.0
+cryptography==46.0.3
+
+# openpyxl — lecture des rapports MT5 exportés en xlsx (étape 4, import).
+openpyxl==3.1.5
+
+# psutil — détecte si le terminal MetaTrader 5 tourne déjà (par la liste des
+# process système), pour que la boucle de reconnexion de fond ne déclenche
+# jamais l'API MetaTrader5 (et donc jamais un lancement du terminal) quand
+# celui-ci est fermé. Voir mt5_service.is_terminal_running().
+psutil==6.1.1
+
+# MetaTrader5 — Windows uniquement; nécessaire pour la connexion à un vrai compte.
+# Sans terminal MT5 disponible, l'application reste utilisable en mode simulation.
+MetaTrader5==5.0.6180

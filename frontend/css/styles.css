@@ -1,0 +1,41 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   POINT D'ENTRÉE CSS — MLxPhantom Journal
+   Chaque composant vit dans son propre fichier ; celui-ci ne fait
+   qu'assembler l'ensemble dans le bon ordre (fondations d'abord, mise en
+   page ensuite, composants pour finir). Ne rien styler ici directement.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Fondations : tokens de design + reset global (tout le reste en dépend) */
+@import "base/variables.css";
+@import "base/reset.css";
+
+/* Mise en page générale */
+@import "layout/shell.css";
+@import "layout/page-header.css";
+
+/* Composants transverses */
+@import "components/common.css";
+@import "components/loading-screen.css";
+@import "components/access-gate.css";
+@import "components/toast.css";
+
+/* Sidebar */
+@import "components/sidebar.css";
+@import "components/account-panel.css";
+
+/* Contenu / tableau de bord */
+@import "components/tabs.css";
+@import "components/filters.css";
+@import "components/metrics.css";
+@import "components/chart-card.css";
+@import "components/period.css";
+@import "components/calendar.css";
+@import "components/repartitions.css";
+@import "components/analyzer.css";
+
+/* Trades */
+@import "components/trade-table.css";
+@import "components/modal.css";
+
+/* Réglages */
+@import "components/settings.css";

@@ -1,0 +1,5 @@
+# Dépendances nécessaires pour COMPILER l'app (pas pour la faire tourner).
+# Séparé de backend/requirements.txt volontairement : ces paquets n'ont
+# rien à faire dans l'exécutable final.
+pyinstaller==6.16.0
+pyinstaller-hooks-contrib>=2025.8

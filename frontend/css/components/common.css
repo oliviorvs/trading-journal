@@ -1,0 +1,85 @@
+/* Éléments transverses réutilisés par plusieurs composants : visibilité
+   des panneaux d'onglet, et indicateur de chargement générique. */
+
+  /* Panel visibility */
+  .panel { display:none; } .panel.active { display:block; }
+
+
+  /* États de chargement (correctif audit UI/UX #4) : le dashboard et les
+     graphiques restaient visuellement figés (anciennes valeurs, ou rien du
+     tout) pendant le temps du fetch réseau — un changement de filtre ou de
+     période donnait l'impression de n'avoir aucun effet. `.is-loading`
+     s'applique au conteneur (metrics-row, highlights-grid, chart-wrap...) :
+     son contenu direct s'estompe et un petit spinner apparaît par-dessus. */
+  .is-loading { position:relative; }
+  .is-loading > *:not(.loading-overlay) { opacity:.35; transition:opacity .15s; pointer-events:none; }
+  .loading-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:2; }
+  .loading-spinner { width:22px; height:22px; border-radius:50%; border:2px solid var(--border2); border-top-color:var(--accent); animation:tj-spin .7s linear infinite; }
+  @keyframes tj-spin { to { transform:rotate(360deg); } }
+
+  /* ── Bandeau d'état de l'application ──────────────────────────────────────
+     Réseau absent, MetaTrader 5 fermé, service local injoignable : ces états
+     étaient auparavant réduits à une pastille dans la page Réglages, que
+     personne ne regarde. Le bandeau les annonce là où l'utilisateur travaille,
+     en ambre (une information, pas une erreur : le journal reste consultable). */
+  .app-banner {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:14px; padding:10px 14px;
+    background:var(--surface); border:1px solid var(--border); border-left:3px solid var(--amber);
+    border-radius:var(--radius); box-shadow:var(--card-shadow);
+    color:var(--text); font-size:var(--fs-sm); line-height:1.45;
+  }
+  .app-banner[hidden] { display:none; }
+  .app-banner-icon { flex:0 0 auto; color:var(--amber); font-size:var(--fs-md); }
+  .app-banner-text { min-width:0; }
+
+  /* ── Réactivité au survol, à l'échelle de l'application ───────────────────
+     Le même vocabulaire partout : la bordure s'affirme, l'ombre se creuse,
+     l'élément monte d'un pixel. Discret, parce que ces écrans se lisent en
+     balayage — un effet plus marqué attirerait l'œil sur l'élément survolé
+     par hasard plutôt que sur le chiffre cherché. Les cartes de KPI du
+     tableau de bord suivent la même règle (voir metrics.css).
+     Le pointeur ne devient `pointer` que sur ce qui est réellement
+     cliquable : le curseur ne doit jamais promettre une action inexistante. */
+  .period-summary-card,
+  .settings-card,
+  .chart-card,
+  .connect-card {
+    transition:background var(--t), border-color var(--t), box-shadow var(--t), transform var(--t);
+  }
+  .period-summary-card:hover,
+  .settings-card:hover,
+  .connect-card:hover {
+    border-color:var(--border2); box-shadow:var(--card-shadow-lg); transform:translateY(-1px);
+  }
+  /* Les cartes de graphique ne se soulèvent PAS : un canvas qui se déplace
+     d'un pixel pendant qu'on vise une barre ferait manquer la cible. Seule
+     la bordure réagit, pour situer la carte sous le curseur. */
+  .chart-card:hover { border-color:var(--border2); }
+
+  /* Calendrier : la cellule d'un jour avec trades se soulève comme une carte
+     (elle est cliquable), celle d'un jour vide garde son état inerte. */
+  .cal-cell { transition:border-color var(--t), background var(--t), box-shadow var(--t), transform var(--t); }
+  .cal-cell:not(.empty):not(.no-trade):hover { box-shadow:var(--card-shadow-lg); transform:translateY(-1px); }
+  .cal-cell.empty:hover, .cal-cell.no-trade:hover { box-shadow:none; transform:none; }
+
+  /* Carte de chaleur horaire : la case survolée s'entoure, pour suivre la
+     ligne (jour) et la colonne (heure) qu'on est en train de lire. */
+  .heat-cell { transition:border-color var(--t), transform var(--t); }
+  .heat-cell:hover { border-color:var(--accent); transform:scale(1.12); }
+
+  /* Onglets, pastilles de compte, boutons de ligne : déjà stylés dans leur
+     composant respectif — on n'ajoute ici que la transition manquante, pour
+     que le changement d'état ne soit jamais abrupt. */
+  .acc-pill, .tab, .filter-btn, .nav-item { transition:color var(--t), border-color var(--t), background var(--t); }
+
+  @media (hover:none) {
+    /* Tactile : pas de déplacement (l'état de survol y reste collé après
+       le toucher, ce qui laisserait un élément soulevé sans raison). */
+    .period-summary-card:hover, .settings-card:hover, .connect-card:hover,
+    .cal-cell:hover, .heat-cell:hover { transform:none; box-shadow:var(--card-shadow); }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    .period-summary-card:hover, .settings-card:hover, .connect-card:hover,
+    .cal-cell:hover, .heat-cell:hover { transform:none; }
+  }

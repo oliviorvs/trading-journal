@@ -1,0 +1,84 @@
+  /* Connect panel */
+  .connect-card { margin:0 16px 14px; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:11.2px; }
+  /* Titres de carte en casse normale : les intitulés tout en capitales
+     ralentissent la lecture et n'apportent rien quand la hiérarchie est déjà
+     portée par la taille et la couleur. */
+  .connect-card h3 { font-size:var(--fs-sm); font-weight:600; margin-bottom:12px; color:var(--text-title); letter-spacing:0; }
+  .field { margin-bottom:8px; }
+  .field label { font-size:var(--fs-xs); color:var(--muted); display:block; margin-bottom:4px; font-family:var(--font); }
+  .field input, .field select, .field textarea { width:100%; background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); padding:8px 11px; color:var(--text); font-family:var(--mono); font-size:var(--fs-sm); outline:none; transition:border-color var(--t), box-shadow var(--t); }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
+  .field-hint { font-size:var(--fs-2xs); color:var(--muted); margin-top:5px; line-height:1.4; font-family:var(--font); }
+  .btn-connect { width:100%; margin-top:10px; padding:10px; background:var(--primary); color:var(--on-primary); border:none; border-radius:var(--radius); font-size:var(--fs-base); font-weight:600; cursor:pointer; transition:background var(--t); }
+  .btn-connect:hover { background:var(--primary-hover); }
+  .btn-connect:disabled { opacity:.45; cursor:default; background:var(--primary); }
+  .status-pill { display:flex; align-items:center; gap:7px; font-size:var(--fs-xs); font-family:var(--mono); margin-top:10px; color:var(--muted); }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--border2); }
+  /* Vert et non bleu : la pastille dit « la liaison au broker est vivante »,
+     c'est un état de santé, pas un élément de marque. */
+  .dot.live { background:var(--pos); box-shadow:0 0 0 3px var(--pos-dim); animation:blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+
+  /* Sidebar capital / account cards */
+  .side-stat-label { font-size:var(--fs-2xs); color:var(--muted); font-family:var(--font); text-transform:uppercase; letter-spacing:.6px; }
+  .side-stat-value {
+    font-size:var(--fs-sm); font-weight:600; font-family:var(--mono); margin-top:2px;
+    /* Filet de sécurité : un gros solde ne doit jamais élargir/casser la
+       sidebar (largeur fixe de 220px) — on tronque proprement avec "…"
+       plutôt que de laisser le chiffre déborder ou repasser à la ligne. */
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .side-stat-row + .side-stat-row { margin-top:8px; }
+  #account-card { padding:14px; }
+  #account-card h3 { margin-bottom:8px; }
+  .connect-card-head { display:flex; align-items:center; justify-content:space-between; }
+  .card-collapse-btn { background:transparent; border:none; color:var(--muted); cursor:pointer; font-size:var(--fs-sm); padding:2px 4px; line-height:1; }
+  .card-collapse-btn:hover { color:var(--text); }
+
+  /* Sélecteur multi-comptes (jusqu'à 4 comptes MT5 enregistrés) */
+  .account-switcher { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .acc-pill {
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:5px 9px; font-size:var(--fs-2xs); font-family:var(--mono); color:var(--muted);
+    cursor:pointer; transition:border-color .15s, color .15s;
+  }
+  .acc-pill:hover { color:var(--text); border-color:var(--border2); }
+  .acc-pill.active { border-color:var(--accent); color:var(--accent); background:var(--primary-soft); font-weight:600; }
+  /* Compte actif mais déconnecté (MT5 fermé, session tombée) : le pill ne
+     doit pas prétendre que tout va bien (couleur d'accent normale), ni
+     paraître inerte — il reste cliquable pour reconnecter. L'ambre signale
+     un état qui attend une action, sans être une erreur en soi. */
+  .acc-pill.active.disconnected { border-color:var(--amber); color:var(--amber); background:var(--surface); }
+  .acc-pill.active.disconnected:hover { background:var(--primary-soft); }
+  .acc-pill-del { color:var(--muted); font-size:11px; line-height:1; padding:0 1px; }
+  .acc-pill-del:hover { color:var(--neg); }
+  .acc-pill-add {
+    display:flex; align-items:center; justify-content:center;
+    border:1px dashed var(--border2); border-radius:var(--radius-sm);
+    width:24px; height:24px; font-size:var(--fs-sm); color:var(--muted); cursor:pointer;
+  }
+  .acc-pill-add:hover { color:var(--text); border-color:var(--muted); }
+
+  /* Étiquette de type sur un compte manuel dans le sélecteur (MAN) — repère
+     discret : le nom du compte reste l'information principale. */
+  .acc-pill-tag { font-size:9px; letter-spacing:.5px; padding:1px 4px; border-radius:3px; background:var(--surface-2); color:var(--muted); border:1px solid var(--border); }
+  .acc-pill.active .acc-pill-tag { color:var(--accent); border-color:var(--accent); background:transparent; }
+
+  /* ── Écran d'accueil : trois portes d'entrée (MT5 / manuel + import / full manuel) ── */
+  .welcome-choices { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  .welcome-choice {
+    display:flex; flex-direction:column; align-items:flex-start; gap:8px; text-align:left;
+    background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius-lg);
+    padding:16px; cursor:pointer; color:var(--text); font-family:var(--font);
+    transition:border-color var(--t), background var(--t), transform var(--t), box-shadow var(--t);
+  }
+  .welcome-choice:hover, .welcome-choice:focus-visible { border-color:var(--accent); background:var(--primary-soft); transform:translateY(-1px); box-shadow:var(--card-shadow); outline:none; }
+  .welcome-choice-icon { font-size:20px; color:var(--accent); line-height:1; }
+  .welcome-choice-title { font-size:var(--fs-md); font-weight:600; color:var(--text-title); }
+  .welcome-choice-desc { font-size:var(--fs-sm); color:var(--muted); line-height:1.45; }
+  @media (max-width:720px) { .welcome-choices { grid-template-columns:1fr; } }
+
+@media (max-width:520px) {
+   .connect-card { margin-left:16px; margin-right:16px; }
+}

@@ -1,0 +1,52 @@
+  /* Calendar */
+
+  /* En-tête de carte : titre + période courante affichée en haut à droite,
+     à la manière d'un badge discret (l'utilisateur voit déjà le mois en
+     gros dans la barre de nav juste en dessous, donc ce libellé reste
+     petit et muet plutôt que de dupliquer l'information). */
+  .cal-card-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .cal-card-period { font-size:var(--fs-2xs); color:var(--muted); font-family:var(--mono); letter-spacing:.6px; text-transform:uppercase; }
+
+  /* Barre de navigation : flèches aux extrémités, mois + résumé du mois
+     centrés entre les deux. */
+  .cal-nav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+  .cal-nav button { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:6px 13px; border-radius:var(--radius); cursor:pointer; transition:color var(--t), border-color var(--t), background var(--t); flex-shrink:0; }
+  .cal-nav button:hover { border-color:var(--accent); color:var(--accent); background:var(--primary-soft); }
+  .cal-nav-center { flex:1; min-width:0; text-align:center; }
+  .cal-month { display:block; font-weight:700; font-size:var(--fs-lg); color:var(--text-title); }
+  .cal-summary { display:block; margin-top:2px; font-size:var(--fs-sm); color:var(--muted); font-family:var(--mono); }
+
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-head { text-align:center; font-size:var(--fs-2xs); color:var(--muted); padding:6px 0; font-family:var(--font); text-transform:uppercase; }
+  .cal-cell { background:var(--surface); border-radius:var(--radius); padding:10px 12px; min-height:96px; border:1px solid var(--border); cursor:pointer; transition:border-color var(--t), background var(--t); display:flex; flex-direction:column; gap:4px; }
+  .cal-cell:hover { border-color:var(--border2); }
+  .cal-cell.pos { background:var(--pos-dim); border-color:rgba(16,185,129,.3); }
+  .cal-cell.neg { background:var(--neg-dim); border-color:rgba(239,68,68,.28); }
+  .cal-cell.empty { background:transparent; border-color:transparent; cursor:default; }
+
+  /* Jour du mois sans aucun trade : distinct des cellules de calage
+     (avant le 1er du mois), qui restent invisibles — ici le numéro du
+     jour reste visible et le centre de la cellule affiche "Aucun trade". */
+  .cal-cell.no-trade { cursor:default; }
+  .cal-cell.no-trade:hover { border-color:var(--border); }
+  .cal-no-trade { flex:1; display:flex; align-items:center; justify-content:center; font-size:var(--fs-xs); color:var(--muted); text-align:center; }
+
+  .cal-cell-top { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .cal-day-num { font-size:var(--fs-xs); color:var(--muted); font-family:var(--mono); }
+  .cal-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .cal-dot.pos { background:var(--pos); }
+  .cal-dot.neg { background:var(--neg); }
+
+  .cal-pnl { font-size:var(--fs-md); font-weight:700; font-family:var(--mono); }
+  .cal-pnl.pos { color:var(--pos); }
+  .cal-pnl.neg { color:var(--neg); }
+  .cal-meta { font-size:var(--fs-xs); color:var(--muted); font-family:var(--mono); }
+  .cal-winrate { font-size:var(--fs-2xs); color:var(--muted); }
+
+  /* Week/month bars */
+  .week-row { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+  .week-label { font-size:var(--fs-xs); color:var(--muted); width:80px; font-family:var(--font); flex-shrink:0; }
+   .bar-wrap { flex:1; min-width:0; height:30px; background:var(--border); border:1px solid var(--border2); border-radius:var(--radius-sm); overflow:hidden; }
+   .bar-fill { height:100%; min-width:0; overflow:hidden; text-overflow:ellipsis; border-radius:var(--radius-sm); display:flex; align-items:center; padding:0 10px; font-size:var(--fs-sm); font-weight:600; font-family:var(--mono); white-space:nowrap; transition:width .5s ease; }
+   .bar-fill.pos { background:var(--pos-dim); color:var(--pos); border-left:3px solid var(--pos); }
+   .bar-fill.neg { background:var(--neg-dim); color:var(--neg); border-left:3px solid var(--neg); }

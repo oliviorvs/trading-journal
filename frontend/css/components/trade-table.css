@@ -1,0 +1,108 @@
+  /* Trade table */
+   .trade-table { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); overflow-x:auto; overscroll-behavior-x:contain; transition:background var(--t), border-color var(--t); }
+  /* Chaque colonne est un minmax(largeur mini en px, poids en fr) : en
+     dessous du seuil, la colonne ne descend pas sous sa largeur mini
+     (assure la lisibilité à 1360px — voir calcul plus haut) ; au-dessus,
+     TOUTES les colonnes grandissent ensemble selon leur poids relatif,
+     au lieu que l'espace libre soit uniquement absorbé par la colonne
+     Note (ce qui créait un grand vide disgracieux sur les écrans larges).
+     Colonne Ticket retirée de l'affichage (bruit visuel, peu utile au
+     quotidien) — le ticket reste utilisé en interne pour les actions. */
+  .trade-row { display:grid; grid-template-columns:minmax(80px,90fr) minmax(48px,50fr) minmax(38px,40fr) minmax(80px,85fr) minmax(80px,85fr) minmax(58px,62fr) minmax(58px,62fr) minmax(44px,48fr) minmax(76px,80fr) minmax(60px,65fr) minmax(46px,50fr) minmax(90px,160fr) minmax(56px,60fr) minmax(72px,76fr); align-items:center; gap:6px; padding:12px 12px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:var(--fs-sm); min-width:990px; }
+  .trade-row:last-child { border-bottom:none; }
+  /* Correctif audit UI/UX #4 (densité) : le padding vertical ci-dessus est
+     passé de 9px à 12px (sans toucher au gap ni aux largeurs de colonnes,
+     qui dimensionnent min-width plus haut) pour aérer un peu les lignes, et
+     une légère alternance + un survol aident à suivre une ligne des yeux
+     sur un tableau aussi dense en colonnes. N'affecte que #trade-list (pas
+     l'en-tête ni la liste, plus courte, de la page Symboles). */
+  #trade-list .trade-row:nth-child(even) { background:var(--row-alt); }
+  #trade-list .trade-row:hover { background:var(--row-hover); }
+  .trade-header { background:var(--surface-2); color:var(--muted); font-family:var(--font); font-weight:600; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.7px; }
+  /* Filet de sécurité générique : avec des colonnes aussi resserrées, tout
+     contenu inhabituellement long (symbole, prix...) doit être tronqué
+     proprement plutôt que de casser l'alignement de la grille ou de
+     forcer un retour à la ligne. Le texte complet reste lisible au survol
+     via l'attribut title sur les cellules qui en ont un. */
+  .trade-row > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cell-symbol { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .risk-auto-mark { color:var(--muted); font-size:var(--fs-2xs); margin-left:2px; }
+  .badge { display:inline-block; font-family:var(--font); font-size:var(--fs-2xs); padding:3px 9px; border-radius:var(--radius-xs); font-weight:600; letter-spacing:.4px; text-transform:uppercase; }
+  .badge-buy { background:var(--pos-dim); color:var(--pos); }
+  .badge-sell { background:var(--neg-dim); color:var(--neg); }
+  .open-badge { background:var(--primary-soft); color:var(--accent); }
+
+  /* Origine du trade (MT5 / manuel / import) — étape 5. Le badge vit DANS la
+     cellule Statut (empilé sous OUVERT / Clôturée) : la grille de 14 colonnes
+     et la numérotation des cellules du mode cartes (voir plus bas) ne
+     bougent pas. Discret par construction : c'est un repère, pas une alerte. */
+  .cell-status { display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
+  .badge-source { padding:2px 6px; font-size:var(--fs-2xs); letter-spacing:.5px; border:1px solid transparent; }
+  .badge-source-mt5 { background:var(--surface-2); color:var(--muted); border-color:var(--border); }
+  .badge-source-manual { background:rgba(245,158,11,.14); color:var(--amber); }
+  .badge-source-import { background:var(--primary-soft); color:var(--accent); }
+
+  /* Note preview shown directly in the trade table */
+  .note-preview { color:var(--muted); font-family:var(--font); font-size:var(--fs-sm); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note-preview.has-note { color:var(--text); }
+  .row-actions { display:flex; gap:4px; justify-content:flex-end; }
+
+  /* Notes / view / delete row buttons */
+  .note-btn, .view-btn, .delete-btn { background:transparent; border:none; cursor:pointer; font-size:var(--fs-md); color:var(--muted); padding:4px 7px; border-radius:var(--radius-xs); transition:color var(--t), background var(--t); position:relative; }
+  .note-btn:hover, .view-btn:hover { background:var(--primary-soft); }
+  .delete-btn:hover { background:var(--neg-dim); }
+  .note-btn:hover, .view-btn:hover { color:var(--accent); }
+  .note-btn.has-note, .view-btn.has-note { color:var(--accent); }
+  .note-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); position:absolute; top:1px; right:1px; }
+  .delete-btn:hover { color:var(--neg); }
+
+   .trade-pagination { display:flex; align-items:center; justify-content:center; gap:14px; padding:12px; color:var(--muted); font-family:var(--mono); font-size:var(--fs-sm); }
+   .trade-pagination button { min-width:32px; padding:5px 10px; }
+
+  /* ── Journal en petite largeur : passage du tableau à des cartes ──────────
+     Sous 900px, un tableau de 14 colonnes à 990px de large ne tient plus :
+     il ne restait qu'un long défilement horizontal, où l'on perd la colonne
+     Symbole dès qu'on va lire le Profit. Chaque ligne devient donc une
+     carte, l'en-tête disparaît et chaque cellule porte son propre intitulé
+     (attribut data-label posé dans trades.js). Aucune donnée n'est masquée :
+     c'est la même ligne, pliée. */
+@media (max-width:900px) {
+   .trade-table { overflow-x:visible; background:transparent; border:none; box-shadow:none; }
+   .trade-table .trade-header { display:none; }
+   #trade-list { display:grid; gap:10px; }
+   #trade-list .trade-row {
+     display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 12px;
+     min-width:0; padding:14px; border:1px solid var(--border); border-bottom:1px solid var(--border);
+     border-radius:var(--radius-lg); background:var(--surface); box-shadow:var(--card-shadow);
+   }
+   /* L'alternance de fond n'a plus de sens entre des cartes détachées. */
+   #trade-list .trade-row:nth-child(even) { background:var(--surface); }
+   #trade-list .trade-row:hover { background:var(--surface); border-color:var(--border2); }
+   /* align-items:flex-start — sans quoi un enfant en ligne (le badge Sens,
+      le badge Statut) s'étirerait sur toute la largeur de la cellule. */
+   #trade-list .trade-row > span { display:flex; flex-direction:column; align-items:flex-start; gap:3px; white-space:normal; }
+   /* La barre d'actions reste horizontale : la règle ci-dessus la mettait en
+      colonne, et les trois boutons s'empilaient l'un sous l'autre. */
+   #trade-list .trade-row > span.row-actions { flex-direction:row; align-items:center; }
+   #trade-list .trade-row > span[data-label]:before {
+     content:attr(data-label);
+     font:600 var(--fs-2xs)/1.2 var(--font); color:var(--muted);
+     text-transform:uppercase; letter-spacing:.7px;
+   }
+   /* Symbole et Profit en tête de carte : ce sont les deux informations
+      qu'on cherche en premier dans une liste de trades. */
+   #trade-list .trade-row > span:nth-child(1),
+   #trade-list .trade-row > span:nth-child(9) { font-size:var(--fs-md); }
+   /* La note peut être longue : elle occupe la largeur et s'affiche en entier. */
+   #trade-list .trade-row > span:nth-child(12) { grid-column:1 / -1; }
+   #trade-list .note-preview { white-space:normal; overflow:visible; }
+   #trade-list .trade-row .row-actions { grid-column:1 / -1; justify-content:flex-start; gap:8px; padding-top:8px; border-top:1px solid var(--border); }
+   #trade-list .trade-row .row-actions button { font-size:var(--fs-lg); padding:6px 12px; }
+   .trade-pagination { flex-wrap:wrap; gap:10px; }
+}
+/* On garde DEUX colonnes même sur téléphone : en une seule, une carte de 13
+   cellules devient une colonne interminable qu'il faut dérouler entièrement
+   pour passer au trade suivant. */
+@media (max-width:380px) {
+   #trade-list .trade-row { gap:8px; padding:12px; }
+}

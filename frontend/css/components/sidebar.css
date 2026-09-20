@@ -1,0 +1,35 @@
+  /* Sidebar */
+  .logo { padding:0 16px 18px; border-bottom:1px solid var(--border); margin-bottom:14px; display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+   /* Le nom du produit passe sur deux lignes plutôt que d'être rétréci pour
+      tenir sur une : la marque reste lisible dans 220px de large. */
+   .logo h1 { display:flex; align-items:center; gap:10px; font-size:var(--fs-md); font-weight:700; line-height:1.25; letter-spacing:-.2px; color:var(--text-title); }
+   .logo h1 .brand-logo { width:34px; height:34px; flex-basis:34px; border-radius:var(--radius-sm); border:1px solid var(--border2); }
+  .logo p { font-size:var(--fs-2xs); color:var(--muted); margin-top:6px; font-family:var(--mono); letter-spacing:.4px; }
+
+  /* Bouton bascule thème clair / sombre */
+  .theme-toggle { flex-shrink:0; width:32px; height:32px; border-radius:var(--radius); border:1px solid var(--border); background:var(--surface-2); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:color var(--t), border-color var(--t), background var(--t); }
+  .theme-toggle:hover { border-color:var(--accent); color:var(--accent); background:var(--primary-soft); }
+
+  /* Navigation : l'élément actif est une pastille pleine teintée, pas un
+     simple filet à gauche — sur une liste de sept entrées, la forme se
+     repère plus vite que la couleur seule. */
+  .nav-item { display:flex; align-items:center; gap:11px; margin:2px 12px; padding:9px 12px; border-radius:var(--radius); cursor:pointer; color:var(--muted); font-size:var(--fs-base); font-weight:500; transition:color var(--t), background var(--t); }
+  .nav-item:hover { color:var(--text); background:var(--surface-2); }
+  .nav-item.active { color:var(--accent); background:var(--primary-soft); font-weight:600; }
+  .nav-icon { font-size:var(--fs-md); width:18px; text-align:center; opacity:.9; }
+  .nav-item.active .nav-icon { opacity:1; }
+   .sidebar-bottom { margin-top:auto; }
+   .logout-btn { display:flex; align-items:center; justify-content:center; gap:8px; width:calc(100% - 32px); margin:2px 16px 8px; padding:9px 10px; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--muted); font-size:var(--fs-xs); font-weight:500; cursor:pointer; transition:color var(--t), border-color var(--t), background var(--t); }
+   .logout-btn span { font-size:16px; }
+   .logout-btn:hover { color:var(--neg); border-color:var(--neg); background:var(--neg-dim); }
+
+@media (max-width:900px) {
+   .sidebar-bottom { margin-top:12px; }
+}
+@media (max-width:520px) {
+   .logo { padding-left:16px; padding-right:16px; }
+   .logo h1 { font-size:var(--fs-sm); }
+   .logo h1 .brand-logo { width:28px; height:28px; flex-basis:28px; }
+   .nav-item { padding:9px 16px; }
+   .logout-btn { width:calc(100% - 32px); margin-left:16px; margin-right:16px; }
+}

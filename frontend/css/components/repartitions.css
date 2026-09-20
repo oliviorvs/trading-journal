@@ -1,0 +1,50 @@
+  /* Répartitions */
+  .repart-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:0; }
+
+@media (max-width:900px) {
+   .repart-grid { grid-template-columns:1fr; }
+}
+
+  .repart-row { display:grid; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:var(--fs-sm); }
+  /* Filet de sécurité : un symbole ou tag inhabituellement long ne doit
+     jamais élargir la ligne au-delà de sa colonne (grilles fr-based déjà
+     responsives, mais le contenu texte, lui, ne l'est pas nativement). */
+  .repart-row > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .repart-row:last-child { border-bottom:none; }
+  .repart-header { background:var(--surface-2); color:var(--muted); font-family:var(--font); font-weight:600; font-size:var(--fs-2xs); text-transform:uppercase; letter-spacing:.7px; }
+  .repart-row:not(.repart-header):hover { background:var(--row-hover); }
+  .repart-3 { grid-template-columns:1fr 1fr 1fr; }
+  .repart-4 { grid-template-columns:1.2fr 1fr 1fr 1fr; }
+  .repart-5 { grid-template-columns:1.3fr .8fr .8fr .9fr 1fr; }
+  .repart-5b { grid-template-columns:1.2fr .8fr .8fr .8fr 1fr; }
+  .repart-6 { grid-template-columns:1.2fr .7fr .8fr .7fr .8fr 1fr; }
+  .repart-row span:not(:first-child) { text-align:right; }
+  .repart-empty { padding:24px; text-align:center; color:var(--muted); font-family:var(--font); font-size:var(--fs-base); }
+
+  /* Part (%) affichée avec une mini-barre de proportion */
+  .pct-cell { display:inline-flex; align-items:center; gap:6px; justify-content:flex-end; width:100%; }
+  .pct-bar { width:32px; height:5px; border-radius:1px; background:var(--border); overflow:hidden; flex-shrink:0; }
+  .pct-bar-fill { height:100%; background:var(--primary); border-radius:1px; }
+
+  /* Long/Short bar */
+  .ls-bar { height:6px; border-radius:var(--radius-sm); overflow:hidden; display:flex; margin-bottom:16px; background:var(--neg); }
+  .ls-bar-fill { height:100%; background:var(--pos); }
+
+  /* Discipline bulletin */
+  .discipline-box { display:flex; align-items:center; gap:16px; margin-bottom:16px; }
+  .discipline-ring { width:60px; height:60px; border-radius:50%; border:2px solid var(--pos); background:var(--pos-dim); display:flex; align-items:center; justify-content:center; font-size:var(--fs-xl); font-weight:700; font-family:var(--display); color:var(--pos); flex-shrink:0; }
+  .discipline-ring.grade-D, .discipline-ring.grade-C { border-color:var(--neg); color:var(--neg); }
+  .discipline-ring.grade-D, .discipline-ring.grade-C { background:var(--neg-dim); }
+  .discipline-ring.grade-NA { border-color:var(--border2); background:var(--surface-2); color:var(--muted); }
+  .discipline-list { display:flex; flex-direction:column; gap:10px; }
+  .discipline-item { display:flex; align-items:center; justify-content:space-between; font-size:var(--fs-base); }
+  .grade-pill { font-family:var(--font); font-weight:600; font-size:var(--fs-xs); padding:3px 11px; border-radius:var(--radius-xs); border:1px solid var(--pos); background:var(--pos-dim); color:var(--pos); }
+  .grade-pill.grade-D, .grade-pill.grade-C { border-color:var(--neg); background:var(--neg-dim); color:var(--neg); }
+  .grade-pill.grade-NA { border-color:var(--border2); background:var(--surface-2); color:var(--muted); }
+
+  /* Hourly heatmap */
+   .heatmap-scroll { width:100%; overflow-x:auto; overscroll-behavior-x:contain; padding-bottom:2px; }
+   .heatmap-grid { display:grid; grid-template-columns:44px repeat(24,minmax(22px,1fr)); gap:4px; min-width:670px; padding-bottom:4px; }
+   .heat-head { min-width:22px; text-align:center; font-size:var(--fs-2xs); color:var(--muted); font-family:var(--mono); padding:4px 0; }
+  .heat-label { font-size:var(--fs-2xs); color:var(--muted); font-family:var(--mono); display:flex; align-items:center; }
+   .heat-cell { min-width:22px; min-height:26px; border-radius:var(--radius-xs); background:var(--surface-2); border:1px solid var(--border); }

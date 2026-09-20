@@ -1,0 +1,42 @@
+MLxPhantom Journal - Licence d'utilisation
+
+Copyright (c) 2026 MLxPhantom Journal
+Tous droits reserves.
+
+1. Autorisation
+
+Cette licence accorde a l'utilisateur une autorisation personnelle,
+non exclusive et non transferable d'installer et d'utiliser MLxPhantom
+Journal sur un ordinateur Windows dont il a le controle.
+
+2. Restrictions
+
+Sauf autorisation ecrite de MLxPhantom Journal, l'utilisateur ne peut pas :
+- vendre, louer ou sous-licencier le logiciel ;
+- redistribuer l'installateur ou l'executable ;
+- modifier, decompiler, desassembler ou tenter d'extraire le code source ;
+- supprimer les mentions de copyright ou de licence.
+
+3. Donnees de l'utilisateur
+
+Les donnees de trading, notes, pieces jointes et reglages sont stockes
+localement sur l'ordinateur de l'utilisateur. L'utilisateur est responsable
+de ses sauvegardes et de la protection de ses fichiers de donnees.
+
+4. Absence de garantie
+
+Le logiciel est fourni « en l'etat », sans garantie expresse ou implicite.
+MLxPhantom Journal ne garantit pas que le logiciel sera exempt d'erreurs,
+continuera a fonctionner avec tous les brokers ou produira des resultats
+financiers. Le logiciel ne constitue pas un conseil financier.
+
+5. Responsabilite
+
+Dans la mesure permise par la loi applicable, MLxPhantom Journal ne pourra
+pas etre tenu responsable des pertes de donnees, pertes financieres ou
+ dommages indirects lies a l'utilisation du logiciel.
+
+6. Acceptation
+
+L'installation ou l'utilisation du logiciel vaut acceptation de cette
+licence.

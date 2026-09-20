@@ -1,0 +1,112 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   VARIABLES — tokens de design (couleurs, typographie, rayons, thèmes)
+   Fichier consommé par tous les autres modules : aucun hex ne doit être
+   écrit en dur dans un composant, sinon le thème clair décroche.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+  :root {
+    /* ── Typographie ──────────────────────────────────────────────────────
+       Montserrat porte les titres, la navigation et les boutons : c'est la
+       voix de l'interface. Inter porte le texte courant, plus neutre et plus
+       lisible en petit corps.
+       DM Mono reste réservé aux CHIFFRES et aux tableaux denses : les
+       chasses fixes alignent les colonnes de prix et de P&L, ce qu'aucune
+       proportionnelle ne fait correctement. Ce n'est pas une troisième voix
+       typographique, c'est un outil de mise en tableau. */
+    --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --display: 'Montserrat', 'Inter', system-ui, sans-serif;
+    --mono: 'DM Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+    /* ── Rayons ───────────────────────────────────────────────────────────
+       Correction charte : rayon fixe et quasi-carré partout, SAUF les
+       éléments réellement circulaires (spinner, puces, ronds de statut...)
+       qui utilisent `border-radius:50%` en dur dans leur règle et ne
+       dépendent donc pas de ces variables — ils gardent leur forme de
+       cercle intacte. */
+    --radius-lg: 1px;    /* cartes, tableaux, modales */
+    --radius: 1px;       /* boutons, champs, onglets */
+    --radius-sm: 1px;    /* éléments compacts */
+    --radius-xs: 1px;    /* badges, pastilles */
+
+    /* ── Échelle typographique ────────────────────────────────────────── */
+    /* Réduite de 20% (demande produit) — mêmes proportions relatives. */
+    --fs-2xs: 9px;
+    --fs-xs: 10px;
+    --fs-sm: 11px;
+    --fs-base: 10px;
+    --fs-md: 12px;
+    --fs-lg: 14px;
+    --fs-xl: 16px;
+    --fs-2xl: 20.8px;   /* valeurs de métrique principale */
+    --fs-3xl: 24px;     /* titre de page */
+
+    /* ── Couleurs de marque (identiques dans les deux thèmes) ──────────── */
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --on-primary: #FFFFFF;
+    --violet: #8B5CF6;
+    --amber: #F59E0B;
+
+    /* ── Sémantique gain / perte ───────────────────────────────────────
+       Vert et rouge indépendants de la couleur de marque : en trading, ces
+       deux couleurs ont un sens fixe et ne doivent jamais servir d'accent
+       décoratif ailleurs. */
+    --pos: #10B981;
+    --neg: #EF4444;
+
+    /* Durée de transition unique, centralisée : un seul rythme pour toute
+       l'interface, et un seul endroit à couper en « mouvement réduit ». */
+    --t: .18s;
+  }
+
+  /* ── Thème sombre (par défaut) ───────────────────────────────────────────
+     Le fond n'est pas un gris neutre mais un bleu très désaturé : il se
+     rattache à la couleur de marque et évite le rendu « terminal » d'un
+     #121212. Les surfaces montent en clarté avec l'élévation. */
+  :root, [data-theme="dark"] {
+    --bg: #0B0F14;
+    --surface: #111827;
+    --surface-2: #161F2E;       /* champs, survols, en-têtes de tableau */
+    --border: #1F2A3A;
+    --border2: #2E3C50;
+    --text: #E6EDF5;
+    --text-title: #FFFFFF;
+    /* Le gris de la charte (#64748B) tombe sous le seuil AA sur ce fond :
+       on garde sa teinte en remontant la luminosité. */
+    --muted: #94A3B8;
+    /* Sur fond sombre, le bleu de marque manque de luminosité pour du texte
+       ou une icône : l'accent lisible est un bleu plus clair, tandis que les
+       aplats (boutons pleins) gardent --primary. */
+    --accent: #60A5FA;
+    --accent-dim: rgba(37,99,235,.18);
+    --primary-soft: rgba(37,99,235,.16);
+    --pos-dim: rgba(16,185,129,.14);
+    --neg-dim: rgba(239,68,68,.14);
+    --row-alt: rgba(148,163,184,.04);
+    --row-hover: rgba(148,163,184,.08);
+    --card-shadow: 0 1px 2px rgba(0,0,0,.4);
+    --card-shadow-lg: 0 12px 32px rgba(0,0,0,.45);
+    --overlay: rgba(3,7,12,.72);
+  }
+
+  /* ── Thème clair ──────────────────────────────────────────────────────── */
+  [data-theme="light"] {
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --surface-2: #F1F5F9;
+    --border: #E2E8F0;
+    --border2: #CBD5E1;
+    --text: #0F172A;
+    --text-title: #0F172A;
+    --muted: #64748B;
+    --accent: #2563EB;
+    --accent-dim: #EFF6FF;
+    --primary-soft: #EFF6FF;
+    --pos-dim: rgba(16,185,129,.12);
+    --neg-dim: rgba(239,68,68,.10);
+    --row-alt: rgba(100,116,139,.04);
+    --row-hover: rgba(37,99,235,.06);
+    --card-shadow: 0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
+    --card-shadow-lg: 0 16px 40px rgba(15,23,42,.12);
+    --overlay: rgba(15,23,42,.45);
+  }

@@ -1,0 +1,32 @@
+  /* Chart container */
+   .chart-card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow); padding:14.4px; margin-bottom:13px; transition:background var(--t), border-color var(--t); }
+  .chart-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+  .chart-title { font-size:var(--fs-md); font-weight:600; color:var(--text-title); letter-spacing:-.1px; }
+  .chart-wrap { position:relative; height:195px; }
+   #page-dashboard .chart-wrap { height:320px; }
+
+   /* Carte du graphique principal du dashboard : les onglets
+      Capital / Drawdown vivent DANS la carte, au-dessus du titre (voir
+      maquette), et le titre passe donc juste sous eux. La courbe est plus
+      haute ici que partout ailleurs : c'est l'élément central de l'écran. */
+   .dashboard-chart-card { margin-bottom:0; }
+   .dashboard-chart-card .tabs { margin-bottom:14px; }
+   .dashboard-chart-card .chart-head { margin-bottom:14px; }
+   #page-dashboard .dashboard-chart-card .chart-wrap { height:385px; }
+  .chart-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:var(--fs-base); text-align:center; padding:0 20px; }
+
+  /* Legend */
+  .legend { display:flex; gap:16px; }
+  .leg { display:flex; align-items:center; gap:5px; font-size:var(--fs-xs); color:var(--muted); font-family:var(--font); }
+  .leg-dot { width:10px; height:10px; border-radius:var(--radius-sm); }
+
+@media (max-width:900px) {
+   #page-dashboard .chart-wrap { height:270px; }
+   #page-dashboard .dashboard-chart-card .chart-wrap { height:300px; }
+}
+@media (max-width:520px) {
+   #page-dashboard .chart-wrap { height:235px; }
+   #page-dashboard .dashboard-chart-card .chart-wrap { height:250px; }
+   .chart-card { padding:12px; }
+   .chart-head { align-items:flex-start; gap:8px; flex-wrap:wrap; }
+}
