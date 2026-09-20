@@ -113,6 +113,7 @@ export function openEditModal(ticket) {
 
   document.getElementById('edit-modal').style.display = 'flex';
   loadEditAttachments(ticket);
+  loadEditSopSection(ticket);
 }
 
 // Ajout manuel d'un trade (compte manuel) : même modale, mode « création ».
@@ -131,6 +132,9 @@ export function openCreateTradeModal() {
   const hint = document.getElementById('risk-auto-hint');
   if (hint) hint.style.display = 'none';
   document.getElementById('edit-attach-section').style.display = 'none';
+  // Comme les pièces jointes : un ticket n'existe qu'APRÈS la création. La
+  // conformité au plan se saisit donc en rouvrant le trade une fois créé.
+  document.getElementById('edit-sop-section').style.display = 'none';
 
   document.getElementById('edit-modal').style.display = 'flex';
 }
@@ -217,6 +221,11 @@ export async function saveNotes() {
     if (!creating) {
       const idx = state.allTrades.findIndex(t => t.ticket === ticket);
       if (idx !== -1) state.allTrades[idx] = saved;
+      // Ticket connu (mode édition) : la conformité au plan est enregistrée
+      // dans la même action que le reste de la fiche. En création, aucun
+      // ticket n'existe encore — la section SOP est masquée (voir
+      // openCreateTradeModal) et rien n'est envoyé ici.
+      await saveEditSopSection(ticket);
     }
     showToast(creating ? 'Trade ajouté' : 'Modifications enregistrées');
     closeEditModal();
@@ -232,7 +241,60 @@ export async function saveNotes() {
   } catch (e) { showToast(e.message || 'Erreur lors de l\'enregistrement'); }
 }
 
-// ── Pièces jointes (ajout / suppression) ────────────────────────────────────
+// ── Conformité au plan (SOP) ─────────────────────────────────────────────
+// Import dynamique et tolérant aux erreurs : si le module Analyzer est
+// désactivé (voir sa documentation), la fiche de modification continue de
+// fonctionner normalement, section simplement masquée.
+let _sopState = null; // { versionId, items: [{id,label,required}] } | null
+
+async function loadEditSopSection(ticket) {
+  const section = document.getElementById('edit-sop-section');
+  const container = document.getElementById('edit-sop-items');
+  _sopState = null;
+  if (ticket == null) { section.style.display = 'none'; return; }
+  try {
+    const [sop, journal] = await Promise.all([
+      apiGet('/analyzer/sop'),
+      apiGet(`/analyzer/trades/${ticket}/journal`),
+    ]);
+    if (!sop.active || !sop.active.items.length) {
+      section.style.display = 'none';
+      return;
+    }
+    _sopState = { versionId: sop.active.id, items: sop.active.items };
+    container.innerHTML = sop.active.items.map(item => `
+      <label class="field" style="flex-direction:row;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" data-sop-item="${item.id}" ${journal.sop && journal.sop[item.id] ? 'checked' : ''}
+               style="width:auto">
+        <span>${escapeHtml(item.label)}${item.required ? '' : ' <span style="color:var(--muted)">(facultatif)</span>'}</span>
+      </label>`).join('');
+    section.style.display = '';
+  } catch (e) {
+    // Module Analyzer indisponible ou erreur réseau : la fiche reste
+    // utilisable, seule cette section n'apparaît pas.
+    section.style.display = 'none';
+  }
+}
+
+async function saveEditSopSection(ticket) {
+  if (!_sopState || ticket == null) return;
+  const sop = {};
+  document.querySelectorAll('#edit-sop-items [data-sop-item]').forEach(box => {
+    sop[box.dataset.sopItem] = box.checked;
+  });
+  try {
+    await fetch(`${API}/analyzer/trades/${ticket}/journal`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sop }),
+    });
+  } catch (e) {
+    // Non bloquant : le trade lui-même est déjà enregistré à ce stade.
+    showToast('Trade enregistré, mais la conformité au plan n\'a pas pu être sauvegardée');
+  }
+}
+
+
 
 async function loadEditAttachments(ticket) {
   const grid = document.getElementById('edit-attach-grid');

@@ -43,7 +43,18 @@ window.fetch = (input, init) => {
 };
 
 // ── Helper de lecture API ────────────────────────────────────────────────────
-
+// Correction : le motif `const r = await fetch(...); const d = await r.json();`
+// était utilisé partout sans jamais vérifier `r.ok`. Sur une réponse d'erreur
+// (401 avant authentification, 404, 500...), le corps `{"detail": "..."}`
+// était traité comme des données valides — l'exception qui suivait finissait
+// dans un `console.warn` et l'utilisateur voyait un tableau vide, sans la
+// moindre explication. Passer par ce helper transforme toute erreur HTTP en
+// exception porteuse du message du backend.
+// Isolation des comptes côté interface : chaque changement de compte (bascule,
+// suppression, création, import vers un nouveau compte) incrémente une
+// « époque ». Une réponse qui revient d'une lecture lancée sous une époque
+// précédente appartient à l'ANCIEN compte : elle est rejetée (erreur STALE_MSG,
+// que showToast ignore) au lieu d'être dessinée sur le nouveau compte.
 export const STALE_MSG = '__stale_account__';
 
 export function bumpAccountEpoch() {
@@ -76,6 +87,9 @@ if (window.__tjPendingAuthToken) {
 window.tjSetAuthToken = setAuthToken;
 window.tjGetAuthToken = getAuthToken;
 
+// Correction #10 : auparavant codés en dur (calYear: 2026, calMonth: 4),
+// résidu du jeu de données de démo — le calendrier s'ouvrait toujours sur
+// mai 2026 au lieu du mois courant.
 const now = new Date();
 
 export const state = {

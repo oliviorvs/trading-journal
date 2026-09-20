@@ -2,7 +2,7 @@
    .modal-overlay { position:fixed; inset:0; padding:16px; background:var(--overlay); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; z-index:100; overflow:auto; }
   .modal-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--card-shadow-lg); padding:17.6px; width:336px; max-width:90vw; }
   .modal-box h3 { font-size:var(--fs-md); font-weight:600; margin-bottom:14px; color:var(--text-title); }
-  .modal-box textarea { width:100%; background:var(--surface-2); border:1px solid var(--border2); border-radius:var(--radius); padding:11px; color:var(--text); font-family:var(--font); font-size:var(--fs-base); line-height:1.55; outline:none; resize:vertical; min-height:120px; transition:border-color var(--t), box-shadow var(--t); }
+  .modal-box textarea { width:100%; background:var(--surface-2); border:1px solid var(--border2); border-radius:var(--radius); padding:11px; color:var(--text); font-family:var(--font); font-size:var(--fs-base); line-height:1.55; outline:none; resize:vertical; min-height:120px; transition:border-color var(--t), box-shadow var(--t), color var(--t); }
   .modal-box textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
 
   .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }

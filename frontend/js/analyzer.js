@@ -474,34 +474,89 @@ async function renderReport() {
 }
 
 export async function openAnalyzerReport() {
-  // Le middleware d'authentification exige l'en-tête Authorization : on ne
-  // peut donc pas ouvrir l'URL directement dans un onglet. On récupère le
-  // fichier via fetch (qui porte le jeton) puis on l'ouvre en blob.
-  await downloadBlob(`/analyzer/report.html${filterQuery()}`, 'rapport-analyzer.html', true);
+  const path = `/analyzer/report.html${filterQuery()}`;
+
+  // Mode desktop (pywebview) : pas d'onglets dans la fenêtre embarquée —
+  // `window.open()` n'y a aucun effet fiable, c'était la cause du bug
+  // « n'affiche rien ». Le rapport est ouvert dans une VRAIE fenêtre
+  // native séparée.
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.open_html_report) {
+    try {
+      const html = await (await fetchOrThrow(path)).text();
+      const opened = await window.pywebview.api.open_html_report(html);
+      if (!opened) showToast('Ouverture du rapport impossible');
+    } catch (error) {
+      showToast(`Rapport indisponible : ${error.message}`);
+    }
+    return;
+  }
+
+  // Mode navigateur (START.bat) : l'onglet doit s'ouvrir de façon SYNCHRONE,
+  // pendant que le clic est encore actif — sinon le fetch qui suit fait
+  // perdre le geste utilisateur et le navigateur bloque le popup sans le
+  // moindre message, ce qui produisait le même symptôme « rien ne s'affiche ».
+  const tab = window.open('', '_blank');
+  try {
+    const html = await (await fetchOrThrow(path)).text();
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    if (tab) {
+      tab.location.href = url;
+    } else {
+      showToast("Autorisez les fenêtres popup pour ouvrir le rapport, ou utilisez l'export.");
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    if (tab) tab.close();
+    showToast(`Rapport indisponible : ${error.message}`);
+  }
 }
 
 export async function downloadAnalyzerExport(format) {
-  await downloadBlob(`/analyzer/export/${format}${filterQuery()}`, `analyzer.${format}`, false);
-}
-
-async function downloadBlob(path, filename, openInTab) {
+  const path = `/analyzer/export/${format}${filterQuery()}`;
+  const labels = { csv: 'CSV', xlsx: 'Excel', json: 'JSON' };
   try {
-    const response = await fetch(`${API}${path}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const url = URL.createObjectURL(await response.blob());
-    if (openInTab) {
-      window.open(url, '_blank');
-    } else {
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.click();
+    const response = await fetchOrThrow(path);
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `analyzer.${format}`;
+    const blob = await response.blob();
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_file) {
+      const encoded = await blobToBase64(blob);
+      const saved = await window.pywebview.api.save_file(filename, encoded, labels[format] || 'Fichier');
+      showToast(saved ? 'Fichier enregistré' : 'Enregistrement annulé');
+      return;
     }
-    // Libération différée : révoquer immédiatement annulerait l'ouverture.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
+    showToast('Export téléchargé');
   } catch (error) {
     showToast(`Export impossible : ${error.message}`);
   }
+}
+
+async function fetchOrThrow(path) {
+  const response = await fetch(`${API}${path}`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${response.status}`);
+  }
+  return response;
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 export async function generateAnalyzerRules() {
@@ -565,14 +620,21 @@ async function renderSettings() {
       <button class="btn-reset" onclick="this.closest('.symbol-map-row').remove()">Retirer</button>
     </div>`).join('');
 
-  const sopBlock = sop && sop.active
-    ? `<div class="metric-sub" style="margin-bottom:10px">Version active :
-        <strong>${escapeHtml(sop.active.name)}</strong> ·
-        seuil ${Math.round(sop.active.threshold * 100)} % · ${sop.versions.length} version(s)</div>
-       ${sop.active.items.map(i => `<div class="repart-row repart-3">
-         <span>${escapeHtml(i.label)}</span>
-         <span>${i.required ? 'requis' : 'facultatif'}</span><span></span></div>`).join('')}`
-    : '<div class="repart-empty">Aucun plan enregistré.</div>';
+  const sopItemRows = (sop && sop.active ? sop.active.items : []).map((item, index) => `
+    <div class="session-row" data-index="${index}" data-item-id="${item.id}">
+      <input value="${escapeHtml(item.label)}" placeholder="Ex. Structure claire" data-field="label">
+      <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--muted)">
+        <input type="checkbox" data-field="required" ${item.required ? 'checked' : ''} style="width:auto"> Requis
+      </label>
+      <span></span>
+      <button class="btn-reset" onclick="this.closest('.session-row').remove()">Retirer</button>
+    </div>`).join('');
+
+  const sopHistory = sop && sop.versions && sop.versions.length > 1
+    ? `<div class="analyzer-note">Versions précédentes : ${sop.versions.slice(1)
+        .map(v => escapeHtml(v.name)).join(' · ')}
+        — leurs analyses passées ne changent jamais quand vous modifiez le plan.</div>`
+    : '';
 
   return `
     <div class="chart-card" style="margin-bottom:16px">
@@ -600,12 +662,68 @@ async function renderSettings() {
     <div class="chart-card">
       <div class="chart-head"><div><span class="chart-title">Plan de trading (SOP)</span>
         <div class="metric-sub">Modifier le plan crée une NOUVELLE version : vos analyses passées ne changent pas</div></div></div>
-      <div class="trade-table">${sopBlock}</div>
-      <div class="filters" style="margin-top:10px">
-        <button class="btn-sync" onclick="createDefaultSop()">
-          ${sop && sop.active ? 'Recréer le plan par défaut' : 'Créer le plan par défaut'}</button>
+      <div class="analyzer-note" style="margin-bottom:12px">
+        <strong>À quoi ça sert :</strong> chaque élément ci-dessous est une condition de VOTRE
+        stratégie (ex. « structure claire », « retest confirmé »). Une fois le plan créé, une
+        case à cocher apparaît pour chaque élément dans la fiche de modification de vos trades
+        (bouton « Modifier » sur un trade). Un trade est jugé <strong>conforme</strong> quand il
+        atteint le seuil défini ci-dessous — visible dans l'onglet Discipline. Sans plan
+        enregistré, cette case n'apparaît nulle part : c'est pourquoi elle semblait manquante.
       </div>
+      <div id="an-sop-items">${sopItemRows}</div>
+      <div class="filters" style="margin:10px 0">
+        <button class="btn-sync" onclick="addAnalyzerSopItem()">Ajouter un élément</button>
+      </div>
+      <div class="filter-field" style="max-width:260px;margin-bottom:12px">
+        <label for="an-sop-threshold">Seuil de conformité</label>
+        <select id="an-sop-threshold">
+          <option value="1" ${!sop || !sop.active || sop.active.threshold >= 1 ? 'selected' : ''}>Tous les éléments requis (100%)</option>
+          <option value="0.8" ${sop && sop.active && Math.abs(sop.active.threshold - 0.8) < 0.01 ? 'selected' : ''}>80% des éléments requis</option>
+          <option value="0.6" ${sop && sop.active && Math.abs(sop.active.threshold - 0.6) < 0.01 ? 'selected' : ''}>60% des éléments requis</option>
+        </select>
+      </div>
+      <div class="filters">
+        <button class="btn-sync" onclick="saveAnalyzerSop()">
+          ${sop && sop.active ? 'Enregistrer (nouvelle version)' : 'Créer le plan'}</button>
+        <button class="btn-reset" onclick="createDefaultSop()">Réinitialiser aux 6 éléments par défaut</button>
+      </div>
+      ${sopHistory}
     </div>`;
+}
+
+export function addAnalyzerSopItem() {
+  const container = document.getElementById('an-sop-items');
+  if (!container) return;
+  container.insertAdjacentHTML('beforeend', `
+    <div class="session-row">
+      <input placeholder="Ex. Confirmation" data-field="label">
+      <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--muted)">
+        <input type="checkbox" data-field="required" checked style="width:auto"> Requis
+      </label>
+      <span></span>
+      <button class="btn-reset" onclick="this.closest('.session-row').remove()">Retirer</button>
+    </div>`);
+}
+
+export async function saveAnalyzerSop() {
+  const items = [...document.querySelectorAll('#an-sop-items .session-row')].map(row => ({
+    label: row.querySelector('[data-field="label"]').value.trim(),
+    required: row.querySelector('[data-field="required"]').checked,
+  })).filter(item => item.label);
+  if (!items.length) return showToast('Ajoutez au moins un élément au plan');
+  const threshold = Number(document.getElementById('an-sop-threshold').value || 1);
+  try {
+    const response = await fetch(`${API}/analyzer/sop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: `SOP ${new Date().toLocaleDateString('fr-FR')}`, items, threshold }),
+    });
+    if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
+    showToast('Plan enregistré — nouvelle version active');
+    await refresh();
+  } catch (error) {
+    showToast(`Enregistrement impossible : ${error.message}`);
+  }
 }
 
 export function addAnalyzerSession() {
@@ -663,6 +781,9 @@ export async function applySymbolSuggestion(canonical, rawSymbols) {
 }
 
 export async function createDefaultSop() {
+  if (!confirm('Créer un plan avec les 6 éléments par défaut ? '
+    + "Si vous en avez déjà un, il est remplacé par une NOUVELLE version — "
+    + 'vos analyses passées ne changent pas.')) return;
   try {
     const response = await fetch(`${API}/analyzer/sop`, {
       method: 'POST',
@@ -670,10 +791,10 @@ export async function createDefaultSop() {
       body: JSON.stringify({}),
     });
     if (!response.ok) throw new Error((await response.json()).detail || `HTTP ${response.status}`);
-    showToast('Plan de trading créé');
+    showToast('Plan réinitialisé aux 6 éléments par défaut');
     await refresh();
   } catch (error) {
-    showToast(`Création impossible : ${error.message}`);
+    showToast(`Réinitialisation impossible : ${error.message}`);
   }
 }
 

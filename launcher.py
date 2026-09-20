@@ -48,6 +48,50 @@ class DesktopApi:
             output.write(pdf_data)
         return True
 
+    def save_file(self, filename: str, encoded_data: str, description: str = "Fichier") -> bool:
+        """Généralise `save_pdf` à n'importe quel export (CSV, JSON, XLSX de
+        l'Analyzer) : même mécanisme, extension et filtre déduits du nom de
+        fichier plutôt que codés en dur.
+
+        Sans ceci, l'Analyzer utilisait un simple lien `<a download>` : dans
+        la fenêtre pywebview embarquée (contrairement à un vrai navigateur),
+        ce mécanisme ne déclenche aucune boîte de dialogue et le clic
+        n'aboutissait à rien de visible — c'est le bug remonté.
+        """
+        data = base64.b64decode(encoded_data)
+        window = webview.windows[0]
+        ext = os.path.splitext(filename)[1].lstrip(".") or "*"
+        selected = window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            save_filename=filename,
+            file_types=(f"{description} (*.{ext})", "Tous les fichiers (*.*)"),
+        )
+        if not selected:
+            return False
+        target = selected[0] if isinstance(selected, (list, tuple)) else selected
+        with open(target, "wb") as output:
+            output.write(data)
+        return True
+
+    def open_html_report(self, html_content: str) -> bool:
+        """Ouvre le rapport Analyzer dans une VRAIE fenêtre pywebview séparée.
+
+        `window.open(url, '_blank')` n'a pas d'équivalent fiable dans une
+        fenêtre pywebview embarquée : il n'y a pas d'onglets, et selon le
+        moteur (WebView2, WebKit, GTK) l'appel est soit ignoré soit sans
+        effet visible — c'est exactement ce qui produisait « n'affiche
+        rien ». Le contenu est donc écrit dans un fichier temporaire (le
+        rapport est déjà autonome, sans CDN) puis ouvert dans une fenêtre
+        pywebview dédiée, qui fonctionne à l'identique sur les trois moteurs.
+        """
+        import tempfile
+
+        handle, path = tempfile.mkstemp(suffix=".html", prefix="analyzer-rapport-")
+        with os.fdopen(handle, "w", encoding="utf-8") as output:
+            output.write(html_content)
+        webview.create_window("Rapport Analyzer", path, width=1200, height=850)
+        return True
+
 # En dev : dossier de ce fichier. Une fois empaqueté avec PyInstaller (mode
 # --onefile), sys._MEIPASS pointe vers le dossier temporaire d'extraction où
 # atterrissent les fichiers ajoutés en --add-data (backend/, frontend/...).

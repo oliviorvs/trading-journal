@@ -47,6 +47,10 @@ export function chartColors() {
     violet: v('--violet', '#8B5CF6'),
     pos: v('--pos', '#10B981'),
     neg: v('--neg', '#EF4444'),
+    // Aplats pleine couleur (correction : ces teintes étaient translucides —
+    // rgba(...,.18) à .22 — ce qui délavait les barres et les aires sous
+    // courbe et les faisait paraître "sales" sur certains fonds. Mêmes
+    // teintes que pos/neg/primary/violet, sans transparence.
     posSoft: 'rgba(16,185,129,1)',
     negSoft: 'rgba(239,68,68,1)',
     primarySoft: 'rgba(37,99,235,1)',
@@ -57,6 +61,10 @@ export function chartColors() {
   };
 }
 
+// Réglages Chart.js communs à TOUS les graphiques, posés une fois.
+// Avant, chaque graphique redéclarait ses polices et ses infobulles dans son
+// propre bloc d'options : les styles divergeaient d'un écran à l'autre et
+// toute retouche demandait de repasser sur cinq fichiers.
 export function applyChartDefaults() {
   const Chart = window.Chart;
   if (!Chart) return;

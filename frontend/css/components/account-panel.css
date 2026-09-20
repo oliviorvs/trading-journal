@@ -6,7 +6,7 @@
   .connect-card h3 { font-size:var(--fs-sm); font-weight:600; margin-bottom:12px; color:var(--text-title); letter-spacing:0; }
   .field { margin-bottom:8px; }
   .field label { font-size:var(--fs-xs); color:var(--muted); display:block; margin-bottom:4px; font-family:var(--font); }
-  .field input, .field select, .field textarea { width:100%; background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); padding:8px 11px; color:var(--text); font-family:var(--mono); font-size:var(--fs-sm); outline:none; transition:border-color var(--t), box-shadow var(--t); }
+  .field input, .field select, .field textarea { width:100%; background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); padding:8px 11px; color:var(--text); font-family:var(--mono); font-size:var(--fs-sm); outline:none; transition:border-color var(--t), box-shadow var(--t), color var(--t); }
   .field input:focus, .field select:focus, .field textarea:focus { border-color:var(--primary); box-shadow:0 0 0 3px var(--primary-soft); }
   .field-hint { font-size:var(--fs-2xs); color:var(--muted); margin-top:5px; line-height:1.4; font-family:var(--font); }
   .btn-connect { width:100%; margin-top:10px; padding:10px; background:var(--primary); color:var(--on-primary); border:none; border-radius:var(--radius); font-size:var(--fs-base); font-weight:600; cursor:pointer; transition:background var(--t); }

@@ -29,16 +29,20 @@
     --radius-xs: 1px;    /* badges, pastilles */
 
     /* ── Échelle typographique ────────────────────────────────────────── */
-    /* Réduite de 20% (demande produit) — mêmes proportions relatives. */
-    --fs-2xs: 9px;
-    --fs-xs: 10px;
-    --fs-sm: 11px;
-    --fs-base: 10px;
-    --fs-md: 12px;
-    --fs-lg: 14px;
-    --fs-xl: 16px;
-    --fs-2xl: 20.8px;   /* valeurs de métrique principale */
-    --fs-3xl: 24px;     /* titre de page */
+    /* Relevée à la demande utilisateur : l'échelle précédente (réduite de
+       20% par une demande produit antérieure) était devenue illisible,
+       notamment dans les tableaux denses de l'Analyzer. Valeurs choisies
+       pour rester nettement lisibles à l'écran tout en gardant les grilles
+       à 7-8 colonnes lisibles sans défilement horizontal à 1360px. */
+    --fs-2xs: 11px;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-base: 14px;
+    --fs-md: 15px;
+    --fs-lg: 16.5px;
+    --fs-xl: 19px;
+    --fs-2xl: 25px;     /* valeurs de métrique principale */
+    --fs-3xl: 29px;     /* titre de page */
 
     /* ── Couleurs de marque (identiques dans les deux thèmes) ──────────── */
     --primary: #2563EB;

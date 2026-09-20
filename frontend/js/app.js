@@ -130,6 +130,13 @@ async function syncAfterAuthentication() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// Correction : ce bloc s'exécutait auparavant dès la fin du parsing du HTML,
+// donc AVANT la saisie du code d'accès. Toutes ses requêtes /api/* étaient
+// rejetées en 401 par le middleware d'authentification (voir backend/main.py)
+// et le dashboard restait vide, sans message — le seul rattrapage existant
+// (syncAfterAuthentication) ne rechargeait rien tant que MT5 était hors ligne.
+// Le chargement est désormais déclenché par l'authentification, jamais avant.
+
 // initTheme() est purement local (localStorage + classes CSS) : aucune raison
 // de le retarder, l'écran de verrouillage doit déjà s'afficher au bon thème.
 initTheme();

@@ -26,3 +26,24 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
   }
+
+  /* ── Anti-flash au changement de thème ────────────────────────────────
+     `body` transitionnait déjà son fond et sa couleur de texte, mais la
+     quasi-totalité du CONTENU (libellés, valeurs de métrique, lignes de
+     tableau, titres, badges…) ne déclarait aucune transition : ces
+     éléments basculaient de couleur INSTANTANÉMENT pendant que le fond de
+     page continuait de glisser en douceur — d'où l'impression de flash.
+     Liste volontairement additive : aucun des sélecteurs ci-dessous ne
+     déclare de `transition` ailleurs, donc rien n'est écrasé (les cartes,
+     boutons et champs qui ont leur propre liste — avec `transform` ou une
+     durée différente pour le chargement/les toasts — restent inchangés). */
+  h1, h2, h3, h4, .page-title, .page-sub, .chart-title, .view-section-title,
+  .metric-label, .metric-value, .metric-sub, .highlight-value, .highlight-label,
+  .side-stat-value, .side-stat-label, .account-overview-value,
+  .repart-row, .repart-header, .trade-row, .trade-header,
+  .badge, .grade-pill, .rel-badge, .discipline-item, .field label, .field-hint,
+  .muted, .pos, .neg, .analyzer-note, .analyzer-warn, .rule-card, .quality-item,
+  .anomaly-list li, .ci-hint, .r-cover {
+    transition: color var(--t) ease, background-color var(--t) ease, border-color var(--t) ease;
+  }
+

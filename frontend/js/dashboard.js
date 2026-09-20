@@ -3,7 +3,10 @@ import { money, moneyAbs, curSym, fmtDuration, currentSymbol, setLoading, escape
 import { loadTrades } from './trades.js';
 import { chartColors } from './theme.js';
 
-
+// Dernières données reçues du backend, gardées pour pouvoir redessiner les
+// graphiques (changement de thème) sans reprovoquer un aller-retour réseau
+// inutile (correctif audit UI/UX — voir redrawDashboardTheme ci-dessous et
+// son usage dans app.js).
 let _lastStats = null;
 let _lastEquityData = null;
 let _lastRealData = null;
@@ -213,6 +216,13 @@ function renderPeriodResults(stats) {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '66%',
+      // Correction : ce donut héritait du réglage global `interaction.mode:
+      // 'index'` (voir applyChartDefaults dans theme.js), pensé pour les
+      // courbes à axe X partagé. Un donut n'a pas d'axe : ce mode y
+      // produisait un survol incohérent (segment qui s'illumine au hasard,
+      // ou plusieurs à la fois). `nearest`/`intersect:true` est le réglage
+      // standard pour les graphiques circulaires — seul le segment
+      // réellement survolé réagit.
       interaction: { mode: 'nearest', intersect: true },
       plugins: {
         legend: { display: false },
