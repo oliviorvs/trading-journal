@@ -2,6 +2,7 @@ db
 docs
 logs
 tests
+dist_installer
 
 # Python
 __init__.py
