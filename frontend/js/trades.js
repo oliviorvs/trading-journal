@@ -1,5 +1,5 @@
 import { API, apiGet, state } from './config.js';
-import { money, showToast, currentSymbol, escapeHtml, sourceBadge } from './utils.js';
+import { money, showToast, currentSymbol, escapeHtml, sourceBadge, confirmAction } from './utils.js';
 
 let tradesRequestId = 0;
 
@@ -259,7 +259,7 @@ export async function deleteTrade(ticket) {
   const message = definitive
     ? `Supprimer définitivement ${label} ? Cette action ne peut pas être annulée.`
     : `Supprimer ${label} du journal ? Cette action ne peut pas être annulée (il pourra revenir lors d'une prochaine synchronisation MT5).`;
-  if (!confirm(message)) return;
+  if (!await confirmAction(message, { confirmLabel: 'Supprimer' })) return;
   try {
     const r = await fetch(`${API}/trades/${ticket}`, { method: 'DELETE' });
     if (!r.ok && r.status !== 204) throw new Error();

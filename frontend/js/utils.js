@@ -100,6 +100,37 @@ export function showToast(msg) {
   t._timer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+let pendingConfirmation = null;
+
+export function confirmAction(message, options = {}) {
+  const modal = document.getElementById('confirm-modal');
+  if (!modal) return Promise.resolve(false);
+
+  if (pendingConfirmation) pendingConfirmation(false);
+  const title = document.getElementById('confirm-modal-title');
+  const text = document.getElementById('confirm-modal-message');
+  const submit = document.getElementById('confirm-modal-submit');
+  const cancel = document.getElementById('confirm-modal-cancel');
+  const close = document.getElementById('confirm-modal-close');
+  title.textContent = options.title || 'Confirmation';
+  text.textContent = message;
+  submit.textContent = options.confirmLabel || 'Confirmer';
+
+  return new Promise(resolve => {
+    const finish = result => {
+      if (pendingConfirmation !== finish) return;
+      pendingConfirmation = null;
+      modal.style.display = 'none';
+      resolve(result);
+    };
+    pendingConfirmation = finish;
+    submit.onclick = () => finish(true);
+    cancel.onclick = () => finish(false);
+    close.onclick = () => finish(false);
+    modal.style.display = 'flex';
+  });
+}
+
 export function fmtDuration(minutes) {
   if (minutes == null) return '—';
   if (minutes < 60) return `${Math.round(minutes)} min`;

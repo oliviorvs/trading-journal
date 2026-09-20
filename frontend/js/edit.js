@@ -1,5 +1,5 @@
 import { API, apiGet, state, loadAttachmentBlobUrl } from './config.js';
-import { showToast, escapeHtml } from './utils.js';
+import { showToast, escapeHtml, confirmAction } from './utils.js';
 import { applyTradeFilters } from './trades.js';
 import { closeViewModal } from './view.js';
 
@@ -349,7 +349,7 @@ export async function uploadAttachment() {
 }
 
 export async function deleteAttachment(id, ticket) {
-  if (!confirm('Supprimer cette pièce jointe ?')) return;
+  if (!await confirmAction('Supprimer cette pièce jointe ?', { confirmLabel: 'Supprimer' })) return;
   try {
     const r = await fetch(`${API}/attachments/${id}`, { method: 'DELETE' });
     if (!r.ok && r.status !== 204) throw new Error();

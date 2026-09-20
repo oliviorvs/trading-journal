@@ -10,7 +10,7 @@
  * ATTÉNUÉ, jamais masqué.
  */
 import { apiGet, API } from './config.js';
-import { money, escapeHtml, setLoading, showToast } from './utils.js';
+import { money, escapeHtml, setLoading, showToast, confirmAction } from './utils.js';
 
 const EMPTY = '<div class="repart-empty" style="grid-column:1/-1">Aucune donnée — renseignez ce champ depuis la fiche d\'un trade</div>';
 
@@ -781,9 +781,9 @@ export async function applySymbolSuggestion(canonical, rawSymbols) {
 }
 
 export async function createDefaultSop() {
-  if (!confirm('Créer un plan avec les 6 éléments par défaut ? '
+  if (!await confirmAction('Créer un plan avec les 6 éléments par défaut ? '
     + "Si vous en avez déjà un, il est remplacé par une NOUVELLE version — "
-    + 'vos analyses passées ne changent pas.')) return;
+    + 'vos analyses passées ne changent pas.', { confirmLabel: 'Créer le plan' })) return;
   try {
     const response = await fetch(`${API}/analyzer/sop`, {
       method: 'POST',

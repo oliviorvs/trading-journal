@@ -7,7 +7,7 @@
 // Un mouvement fait varier le capital du compte, jamais sa performance : il
 // n'entre ni dans le P&L ni dans le drawdown (voir backend/services/movements.py).
 import { API, apiGet, state } from './config.js';
-import { moneyAbs, escapeHtml, showToast } from './utils.js';
+import { moneyAbs, escapeHtml, showToast, confirmAction } from './utils.js';
 import { loadAll } from './dashboard.js';
 import { loadAccountInfo } from './account.js';
 
@@ -114,7 +114,7 @@ export async function addCapitalMovement() {
 }
 
 export async function deleteCapitalMovement(id) {
-  if (!confirm('Supprimer ce mouvement de capital ? Le capital du compte sera recalculé.')) return;
+  if (!await confirmAction('Supprimer ce mouvement de capital ? Le capital du compte sera recalculé.', { confirmLabel: 'Supprimer' })) return;
   try {
     const r = await fetch(`${API}/capital-movements/${id}`, { method: 'DELETE' });
     if (!r.ok) {

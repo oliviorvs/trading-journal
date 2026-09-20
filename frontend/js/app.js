@@ -74,6 +74,8 @@ Object.assign(window, {
   saveAnalyzerSessions: lazy('./analyzer.js', 'saveAnalyzerSessions'),
   addAnalyzerSymbolRule: lazy('./analyzer.js', 'addAnalyzerSymbolRule'),
   saveAnalyzerSymbolMap: lazy('./analyzer.js', 'saveAnalyzerSymbolMap'),
+  addAnalyzerSopItem: lazy('./analyzer.js', 'addAnalyzerSopItem'),
+  saveAnalyzerSop: lazy('./analyzer.js', 'saveAnalyzerSop'),
   applySymbolSuggestion: lazy('./analyzer.js', 'applySymbolSuggestion'),
   createDefaultSop: lazy('./analyzer.js', 'createDefaultSop'),
 

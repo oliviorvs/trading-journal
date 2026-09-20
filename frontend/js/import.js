@@ -10,7 +10,7 @@
 // Le jeton d'aperçu (`_token`) vit côté backend (mémoire, TTL 30 min) : rien
 // n'est écrit tant que l'utilisateur n'a pas confirmé.
 import { API, apiGet, state, bumpAccountEpoch } from './config.js';
-import { money, escapeHtml, showToast } from './utils.js';
+import { money, escapeHtml, showToast, confirmAction } from './utils.js';
 import { loadAll } from './dashboard.js';
 import { loadAccountInfo, refreshMT5State } from './account.js';
 
@@ -339,7 +339,7 @@ async function loadImportBatches() {
 }
 
 async function cancelImportBatch(batchId) {
-  if (!confirm("Annuler cet import ? Tous les trades et les dépôts / retraits qu'il a créés seront supprimés définitivement (y compris les notes et pièces jointes des trades).")) return;
+  if (!await confirmAction("Annuler cet import ? Tous les trades et les dépôts / retraits qu'il a créés seront supprimés définitivement (y compris les notes et pièces jointes des trades).", { confirmLabel: 'Annuler l’import' })) return;
   try {
     const r = await fetch(`${API}/import/batch/${encodeURIComponent(batchId)}`, { method: 'DELETE' });
     const data = await r.json().catch(() => ({}));
