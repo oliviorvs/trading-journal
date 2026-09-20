@@ -59,6 +59,13 @@ export const STALE_MSG = '__stale_account__';
 
 export function bumpAccountEpoch() {
   state.accountEpoch += 1;
+  // Le cache de la page Trades est vidé ICI, et plus seulement dans
+  // loadAll() : toute bascule de compte passe par cette fonction, alors que
+  // tous les chemins de bascule ne repassent pas par loadAll() (bascule vers
+  // un compte non initialisé, par exemple). Combiné à la clé de cache qui
+  // porte désormais le compte (voir trades.js), plus aucune page de trades
+  // ne peut être resservie d'un compte à l'autre.
+  state.tradesCache.clear();
 }
 
 export async function apiGet(path) {

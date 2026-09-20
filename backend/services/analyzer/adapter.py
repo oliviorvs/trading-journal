@@ -27,7 +27,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from models import Trade
+from models import Account, CapitalMovement, Trade
 from services import stats
 from services.analyzer import config as analyzer_config
 from services.analyzer import sessions as sessions_mod
@@ -66,7 +66,16 @@ def _register_listeners() -> None:
     # une fenêtre de session ou une règle de normalisation change le contenu
     # de chaque `TradeView`. Sans elles, l'utilisateur modifiait un réglage et
     # voyait l'écran inchangé — le cache lui resservant la version d'avant.
-    for model in (Trade, TradeEmotion, TradeError, TradeSopResult, TradeTag,
+    # `CapitalMovement` et `Account` ont été AJOUTÉS à cette liste. Chaque
+    # `TradeView` porte le capital disponible à l'ouverture du trade, donc son
+    # risque en % et son R-multiple — trois valeurs que `stats.build_capital_curve`
+    # dérive du capital de départ du compte ET de ses dépôts / retraits. Sans
+    # ces deux tables, enregistrer un dépôt ou recalibrer le capital de
+    # référence laissait l'Analyzer resservir les anciens R-multiples jusqu'à
+    # la prochaine écriture sur une autre table — c'est-à-dire potentiellement
+    # jamais, sur un compte qu'on ne fait que consulter.
+    for model in (Trade, CapitalMovement, Account,
+                  TradeEmotion, TradeError, TradeSopResult, TradeTag,
                   AnalyzerSetting, AnalyzerSymbolMap, AnalyzerSopItem, AnalyzerSopVersion):
         for hook in ("after_insert", "after_update", "after_delete"):
             event.listen(model, hook, _bump)

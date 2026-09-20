@@ -4,12 +4,24 @@
 
   * { box-sizing:border-box; margin:0; padding:0; }
    html, body { height:100%; }
-   body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:var(--fs-base); line-height:1.55; -webkit-font-smoothing:antialiased; transition:background var(--t), color var(--t); }
-   /* Montserrat sur tous les titres et toutes les commandes : la règle est
-      posée une fois ici plutôt que répétée composant par composant. */
+   /* `line-height:1.5` et 14px de corps : les valeurs du rapport HTML exporté. */
+   body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:var(--fs-base); line-height:1.5; -webkit-font-smoothing:antialiased; transition:background var(--t), color var(--t); }
+   /* Une seule famille dans toute l'interface, comme dans le rapport : les
+      titres et les commandes ne changent plus de police, seulement de graisse
+      et de taille. La règle est conservée (et --display pointe sur --font)
+      pour que la charte reste pilotable depuis un seul token. */
    h1, h2, h3, h4, .page-title, .chart-title, .nav-item, button, .btn-connect, .filter-btn, .tab { font-family:var(--display); }
-   /* Les chiffres s'alignent verticalement même en police proportionnelle. */
-   .metric-value, .highlight-value, .side-stat-value, .account-overview-value { font-variant-numeric:tabular-nums; }
+
+   /* Chiffres tabulaires PARTOUT — c'est ce qui remplace l'ancienne police à
+      chasse fixe (DM Mono). Les tableaux de trades, les colonnes de P&L, les
+      valeurs de métrique et les cellules du calendrier gardent donc des
+      colonnes de chiffres parfaitement alignées, sans seconde famille à
+      télécharger. Posé sur `body` et non sur une liste de sélecteurs : toute
+      vue ajoutée plus tard en hérite sans qu'on ait à y penser, et la
+      variante tabulaire n'a aucun effet sur le texte sans chiffre.
+      `input`/`select`/`textarea` n'héritent pas de `body` : ils sont
+      rappelés explicitement. */
+   body, input, select, textarea, button { font-variant-numeric:tabular-nums; }
 
    /* Focus clavier visible partout — condition d'accessibilité de base, et
       seul repère de navigation sans souris dans une app aussi dense. */

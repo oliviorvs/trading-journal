@@ -63,10 +63,19 @@ def equity_curve(symbol: Optional[str] = None, date_from: Optional[date] = None,
     if symbol:
         q = q.filter(Trade.symbol == symbol)
     trades = q.order_by(Trade.open_time).all()
-    # Compte manuel : la courbe suit le capital NET (profit + commission +
-    # swap), cohérent avec state.manual_capital. Comptes MT5 : inchangé.
+    # La courbe suit le capital NET (profit + commission + swap) pour TOUS
+    # les comptes.
+    #
+    # CORRECTION — les comptes MT5 cumulaient ici le profit BRUT, alors que
+    # leur capital de départ (`initial_balance`) est calibré en net par
+    # mt5_service._calibrate_reference_capital : capital_de_départ =
+    # solde_courtier − Σ net − Σ mouvements. La courbe se terminait donc à
+    # `solde_courtier − Σ(commission + swap)`, jamais sur le solde réel du
+    # compte. Le décalage était invisible (une courbe légèrement trop haute,
+    # de plus en plus au fil des trades) et contredisait la courbe de solde
+    # de l'écran « Équité réelle », qui compte en net depuis toujours
+    # (services/equity.BalanceTimeline). Les deux coïncident désormais.
     account = state.get_active_account(db)
-    is_manual = state.is_manual(account)
     daily = {}
     for t in trades:
         # Correction : un trade marqué clôturé mais sans `close_time` (import
@@ -78,7 +87,7 @@ def equity_curve(symbol: Optional[str] = None, date_from: Optional[date] = None,
         if reference is None:
             continue
         day = reference.date().isoformat()
-        daily[day] = daily.get(day, 0) + (stats.net_pnl(t) if is_manual else _profit(t))
+        daily[day] = daily.get(day, 0) + stats.net_pnl(t)
 
     daily_flow: dict = {}
     if not symbol:

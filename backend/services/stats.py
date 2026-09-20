@@ -93,6 +93,7 @@ def build_capital_curve(db: Session) -> Tuple[float, List[datetime], List[float]
         starting_balance = account.initial_balance or 0.0
         value = net_pnl
     else:
+        # Comptes MT5 : même base NETTE que ci-dessus, voir le bloc suivant.
         # Solde en direct UNIQUEMENT s'il vient de CE compte : le terminal MT5
         # n'a qu'une session, ouverte peut-être sur un autre compte (ou en
         # simulation, où le solde affiché est fictif) — ses chiffres ne
@@ -104,8 +105,20 @@ def build_capital_curve(db: Session) -> Tuple[float, List[datetime], List[float]
         # Capital de départ reconstruit à rebours depuis le solde broker :
         # on retire les P&L clôturés ET les mouvements enregistrés (sans quoi
         # un dépôt serait pris pour un gain de trading).
-        starting_balance = current_balance - sum(t.profit for t in closed) - sum(a for _t, a in flows)
-        value = lambda t: t.profit  # noqa: E731 — comportement d'origine (brut)
+        #
+        # CORRECTION — le P&L retiré ici (et cumulé plus bas) est le P&L NET,
+        # plus le profit brut. Le solde du courtier intègre les commissions et
+        # les swaps ; les retrancher en brut laissait le capital de départ
+        # décalé d'exactement Σ(commission + swap) sur tout l'historique — un
+        # décalage qui grandit avec le nombre de trades et qui se propageait à
+        # `capital_before`, donc au risque en % estimé et au R-multiple de
+        # CHAQUE trade. Les deux autres endroits qui refont ce calcul
+        # (mt5_service._calibrate_reference_capital et la route
+        # /api/mt5/accounts/{login}/recalibrate) utilisaient déjà le net :
+        # cette fonction était la seule à en diverger, et c'est elle qui
+        # alimente les colonnes « Risque » et « R » du tableau des trades.
+        starting_balance = current_balance - sum(net_pnl(t) for t in closed) - sum(a for _t, a in flows)
+        value = net_pnl
 
     events: List[Tuple[datetime, float]] = [(t.close_time, value(t)) for t in closed] + list(flows)
     # Tri stable par heure : à heure égale, les trades (ajoutés d'abord)

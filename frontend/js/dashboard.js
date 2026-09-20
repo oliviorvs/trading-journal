@@ -1,7 +1,7 @@
 import { apiGet, state } from './config.js';
 import { money, moneyAbs, curSym, fmtDuration, currentSymbol, setLoading, escapeHtml, showToast } from './utils.js';
 import { loadTrades } from './trades.js';
-import { chartColors } from './theme.js';
+import { chartColors, chartFont } from './theme.js';
 
 // Dernières données reçues du backend, gardées pour pouvoir redessiner les
 // graphiques (changement de thème) sans reprovoquer un aller-retour réseau
@@ -14,11 +14,25 @@ let _lastRealData = null;
 // ── Data loading ──────────────────────────────────────────────────────────────
 
 export async function loadAll() {
-  // Le cache de la page Trades (30 s, clé = filtres seulement) ne connaît pas
-  // le compte actif : sans cette purge, changer de compte ou modifier un
-  // trade puis recharger affichait encore l'ancienne page pendant 30 s.
+  // Purge du cache de la page Trades (30 s) : un trade modifié ou supprimé ne
+  // doit pas continuer d'apparaître. La clé de ce cache porte en plus
+  // l'« époque » du compte (voir trades.js), donc aucune page ne peut être
+  // resservie d'un compte à l'autre même sans cette purge.
   state.tradesCache.clear();
   await Promise.all([loadMetrics(), loadTrades(), loadEquity(), loadRealEquity(), loadMovementsCard()]);
+  // Le dashboard et la page Trades ne sont pas les seuls écrans à l'image des
+  // données : Calendrier, Semaine/Mois, Symboles, Répartitions et Analyzer ne
+  // se chargent qu'au clic sur leur onglet. Sans ce rappel, changer de compte
+  // (ou resynchroniser) depuis l'un d'eux laissait à l'écran les chiffres du
+  // compte ou de l'état précédent, sans rien pour le signaler.
+  // Import dynamique : dashboard.js est importé par navigation.js en cascade,
+  // un import statique créerait un cycle.
+  try {
+    const { refreshActivePanel } = await import('./navigation.js');
+    await refreshActivePanel();
+  } catch (e) {
+    console.warn('rechargement du panneau actif', e);
+  }
 }
 
 // Journal des mouvements de capital (Réglages, phase 6). Import dynamique :
@@ -170,10 +184,14 @@ function periodCenterTextPlugin(total, wins, losses, colors) {
       ctx.save();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `600 ${big}px 'DM Mono', monospace`;
+      // Même pile typographique que le reste de l'interface (voir
+      // theme.js/chartFont) : ce texte est dessiné à la main dans le canvas,
+      // il n'hérite donc d'aucune règle CSS.
+      const family = chartFont();
+      ctx.font = `600 ${big}px ${family}`;
       ctx.fillStyle = colors.text;
       ctx.fillText(`${total} trade(s)`, cx, cy - gap);
-      ctx.font = `600 ${small}px 'DM Mono', monospace`;
+      ctx.font = `600 ${small}px ${family}`;
       ctx.fillStyle = wins >= losses ? colors.pos : colors.neg;
       ctx.fillText(`${wins}W - ${losses}L`, cx, cy + gap);
       ctx.restore();
@@ -256,6 +274,38 @@ export async function loadEquity() {
   }
 }
 
+// ── Bornes de l'axe des montants (courbe de capital) ────────────────────────
+//
+// L'axe était fixé à `min: 0`, au motif qu'un capital réel n'est jamais
+// négatif. Le raisonnement confond deux choses : ne PAS DESCENDRE sous zéro
+// et COMMENCER à zéro. Sur un compte à 10 000 $ qui évolue entre 9 800 et
+// 10 400, forcer l'origine à zéro écrase toute la courbe dans les 4 %
+// supérieurs du cadre — une ligne plate collée en haut, où l'on ne distingue
+// plus rien de l'évolution du capital. C'était le symptôme signalé.
+//
+// On cadre donc sur les données, avec une marge de 8 % de l'amplitude de
+// part et d'autre pour que la courbe ne touche ni le haut ni le bas :
+//
+//   - amplitude nulle (un seul point, ou un capital strictement constant) :
+//     on ouvre une fenêtre de ±1 % autour de la valeur, sinon Chart.js
+//     produit un axe dégénéré et la ligne disparaît ;
+//   - la borne basse est bornée à 0 : la marge ne doit pas faire apparaître
+//     un capital négatif, qui n'a pas de sens — c'est la part du
+//     raisonnement d'origine qui était juste, et elle est conservée ;
+//   - un capital qui frôle réellement zéro garde donc zéro comme plancher.
+//
+// Les valeurs ne sont PAS arrondies : Chart.js choisit lui-même des
+// graduations lisibles à l'intérieur des bornes qu'on lui donne.
+function capitalAxis(values) {
+  const finite = values.filter(v => Number.isFinite(v));
+  if (!finite.length) return {};
+  const lo = Math.min(...finite);
+  const hi = Math.max(...finite);
+  const span = hi - lo;
+  const pad = span > 0 ? span * 0.08 : Math.max(Math.abs(hi) * 0.01, 1);
+  return { min: Math.max(0, lo - pad), max: hi + pad };
+}
+
 function renderEquityCharts(data) {
   const equityCanvas = document.getElementById('chartEquity');
   const ddCanvas = document.getElementById('chartDD');
@@ -297,23 +347,26 @@ function renderEquityCharts(data) {
     // équité qui monte en vert ferait croire à un résultat par point.
     // Une seule courbe suffit : pas d'aire remplie sous la ligne, qui
     // alourdissait le graphique sans apporter d'information supplémentaire.
-    data: { labels, datasets: [{ data: equity, borderColor: c.primary, backgroundColor: c.primary, fill: false, pointRadius: equityRadius, borderWidth: 2 }] },
+    // `tension: 0` — lignes droites entre les points. Le lissage par défaut
+    // (0.35, voir theme.js) fait dépasser la courbe de Bézier au-delà des
+    // valeurs réelles : sur un capital, cela dessine des creux et des sommets
+    // qui n'ont jamais existé, juste avant et après chaque variation nette.
+    data: { labels, datasets: [{ data: equity, borderColor: c.primary, backgroundColor: c.primary, fill: false, pointRadius: equityRadius, borderWidth: 2, tension: 0 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: {
       label: ctx => curSym() + ctx.parsed.y.toLocaleString(),
       afterLabel: ctx => { const f = flows[ctx.dataIndex]; return f ? `${f > 0 ? 'Dépôt' : 'Retrait'} : ${curSym()}${Math.abs(f).toLocaleString()}` : undefined; },
     }}},
-      // min:0 — aucun capital réel n'est négatif, le graphique ne doit
-      // donc jamais descendre sous zéro même si Chart.js aurait
-      // naturellement étendu l'axe en dessous par marge esthétique.
-      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { family: 'DM Mono' }}}, y: { min: 0, border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => curSym()+v.toLocaleString(), font: { family: 'DM Mono' }}}}}
+      // Bornes de l'axe : voir `capitalAxis()`. `min: 0` a été retiré —
+      // c'était la cause de la courbe écrasée tout en haut du repère.
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8}}, y: { ...capitalAxis(equity), border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => curSym()+v.toLocaleString()}}}}
   });
 
   if (state.ddChart) state.ddChart.destroy();
   state.ddChart = new Chart(ddCanvas, {
     type: 'line',
-    data: { labels, datasets: [{ data: dd, borderColor: c.neg, backgroundColor: c.neg, fill: false, pointRadius, borderWidth: 2 }] },
+    data: { labels, datasets: [{ data: dd, borderColor: c.neg, backgroundColor: c.neg, fill: false, pointRadius, borderWidth: 2, tension: 0 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(2)+'%' }}},
-      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8, font: { family: 'DM Mono' }}}, y: { border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => v+'%', font: { family: 'DM Mono' }}}}}
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8}}, y: { border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => v+'%'}}}}
   });
 }
 
@@ -349,7 +402,7 @@ const _fmtDateTime = ms => new Date(ms).toLocaleString('fr-FR');
 
 function _timeScale(c) {
   return { type: 'linear', grid: { display: false },
-    ticks: { maxTicksLimit: 8, callback: v => _fmtDate(v), font: { family: 'DM Mono' } } };
+    ticks: { maxTicksLimit: 8, callback: v => _fmtDate(v) } };
 }
 
 function renderRealEquity(d) {
@@ -395,8 +448,8 @@ function renderRealEquity(d) {
         title: items => _fmtDateTime(items[0].parsed.x),
         label: ctx => `${ctx.dataset.label} : ${curSym()}${ctx.parsed.y.toLocaleString()}`,
       } } },
-      scales: { x: _timeScale(c), y: { border: { display: false }, grid: { color: c.grid },
-        ticks: { callback: v => curSym() + v.toLocaleString(), font: { family: 'DM Mono' } } } } },
+      scales: { x: _timeScale(c), y: { ...capitalAxis([...balance, ...equity].map(p => p.y)), border: { display: false }, grid: { color: c.grid },
+        ticks: { callback: v => curSym() + v.toLocaleString() } } } },
   });
 
   const cur = d.current;
@@ -438,7 +491,7 @@ function renderRealEquity(d) {
           label: ctx => `${ctx.dataset.label} : ${ctx.parsed.y.toFixed(2)}%`,
         } } },
         scales: { x: _timeScale(c), y: { min: 0, border: { display: false }, grid: { color: c.grid },
-          ticks: { callback: v => v + '%', font: { family: 'DM Mono' } } } } },
+          ticks: { callback: v => v + '%' } } } },
     });
   }
   const pct = v => (v == null ? '—' : `${v}%`);

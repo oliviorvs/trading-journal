@@ -28,6 +28,19 @@ export function initTheme() {
   if (!window.Chart) window.addEventListener('load', applyChartDefaults, { once: true });
 }
 
+// ── Typographie des graphiques ───────────────────────────────────────────────
+// Chart.js ne comprend pas les var() CSS : on lit --font une fois et on la
+// repasse partout. Avant, chaque module écrivait `family: 'DM Mono'` en dur
+// dans chaque axe — une police qui n'existe plus depuis la reprise de la
+// typographie du rapport, et que le navigateur remplaçait donc par sa
+// monospace par défaut (Courier sous Windows) : les graduations juraient avec
+// le reste de l'interface. Les chiffres restent alignés grâce à la variante
+// tabulaire, activée ci-dessous.
+export function chartFont() {
+  const family = getComputedStyle(document.documentElement).getPropertyValue('--font').trim();
+  return family || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+}
+
 // ── Palette des graphiques ───────────────────────────────────────────────────
 // Chart.js fige les couleurs à la construction : il ne comprend pas les var()
 // CSS. On les lit donc ici depuis le thème courant, et chaque graphique est
@@ -37,27 +50,29 @@ export function chartColors() {
   const v = (name, fallback) => (s.getPropertyValue(name) || fallback).trim();
   const light = document.documentElement.getAttribute('data-theme') === 'light';
   return {
-    grid: v('--border', '#1F2A3A'),
-    muted: v('--muted', '#94A3B8'),
-    text: v('--text', '#E6EDF5'),
+    grid: v('--border', '#27303F'),
+    muted: v('--muted', '#8B97A8'),
+    text: v('--text', '#E6EBF2'),
     title: v('--text-title', '#FFFFFF'),
-    surface: v('--surface', '#111827'),
-    accent: v('--accent', '#60A5FA'),
-    primary: v('--primary', '#2563EB'),
+    surface: v('--surface', '#161D28'),
+    accent: v('--accent', '#4A7DFF'),
+    primary: v('--primary', '#3357B2'),
     violet: v('--violet', '#8B5CF6'),
-    pos: v('--pos', '#10B981'),
-    neg: v('--neg', '#EF4444'),
-    // Aplats pleine couleur (correction : ces teintes étaient translucides —
-    // rgba(...,.18) à .22 — ce qui délavait les barres et les aires sous
-    // courbe et les faisait paraître "sales" sur certains fonds. Mêmes
-    // teintes que pos/neg/primary/violet, sans transparence.
-    posSoft: 'rgba(16,185,129,1)',
-    negSoft: 'rgba(239,68,68,1)',
-    primarySoft: 'rgba(37,99,235,1)',
-    violetSoft: 'rgba(139,92,246,1)',
+    pos: v('--pos', '#2FB67C'),
+    neg: v('--neg', '#E2574C'),
+    // Aplats pleine couleur des barres et des aires.
+    // Correction : ces quatre teintes étaient écrites en dur et venaient de
+    // l'ANCIENNE charte (#10B981, #EF4444, #2563EB) — le vert, le rouge et
+    // le bleu des barres ne correspondaient donc à aucune des couleurs du
+    // thème repris du rapport, et ne suivaient pas non plus le passage en
+    // thème clair. Elles lisent maintenant les mêmes variables que le reste.
+    posSoft: v('--pos', '#2FB67C'),
+    negSoft: v('--neg', '#E2574C'),
+    primarySoft: v('--primary', '#3357B2'),
+    violetSoft: v('--violet', '#8B5CF6'),
     // L'infobulle prend le contre-pied du fond pour se détacher nettement.
-    tooltipBg: light ? '#0F172A' : '#1E293B',
-    tooltipText: '#F8FAFC',
+    tooltipBg: light ? '#111111' : '#1C2533',
+    tooltipText: '#FFFFFF',
   };
 }
 
@@ -70,7 +85,7 @@ export function applyChartDefaults() {
   if (!Chart) return;
   const c = chartColors();
 
-  Chart.defaults.font.family = "'Inter', system-ui, -apple-system, sans-serif";
+  Chart.defaults.font.family = chartFont();
   Chart.defaults.font.size = 11;
   Chart.defaults.color = c.muted;
   Chart.defaults.borderColor = c.grid;
@@ -90,8 +105,8 @@ export function applyChartDefaults() {
     borderWidth: 1,
     cornerRadius: 8,
     padding: 10,
-    titleFont: { family: "'Montserrat', sans-serif", weight: '600', size: 12 },
-    bodyFont: { family: "'DM Mono', monospace", size: 12 },
+    titleFont: { family: chartFont(), weight: '600', size: 12 },
+    bodyFont: { family: chartFont(), size: 12 },
     displayColors: false,
   });
 

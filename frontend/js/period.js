@@ -175,13 +175,13 @@ function renderPeriodChart(data, labelKey, options = {}) {
         renderSelectedPeriod(period, labelKey);
       },
       scales: {
-        x: { grid: { display: false }, ticks: { color: c.text, font: { family: 'DM Mono', size: 11 }, maxRotation: 45, minRotation: 45, autoSkip: false } },
+        x: { grid: { display: false }, ticks: { color: c.text, font: { size: 11 }, maxRotation: 45, minRotation: 45, autoSkip: false } },
         y: {
           min: dataMin - padding,
           max: dataMax + padding,
           border: { display: false },
           grid: { color: c.grid },
-          ticks: { color: c.muted, font: { family: 'DM Mono' }, callback: value => money(value) },
+          ticks: { color: c.muted, callback: value => money(value) },
         },
       },
       plugins: {

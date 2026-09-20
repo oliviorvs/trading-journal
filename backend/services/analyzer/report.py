@@ -24,6 +24,15 @@ _STATUS_CLASS = {
     reliability.ROBUST: "st-strong",
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SOURCE DE VÉRITÉ DU THÈME.
+# Ces variables et cette typographie ne valent plus seulement pour le rapport :
+# elles ont été reprises telles quelles dans l'interface de l'application
+# (frontend/css/base/variables.css et reset.css). Toute modification ici doit
+# être répercutée là-bas — et inversement — sinon les deux divergent.
+# La pile système et les chiffres tabulaires y remplacent les anciennes
+# polices Google : l'app ne télécharge plus aucune police.
+# ─────────────────────────────────────────────────────────────────────────────
 _CSS = """
 :root{--bg:#0f141c;--surface:#161d28;--surface2:#1c2533;--border:#27303f;
 --text:#e6ebf2;--muted:#8b97a8;--pos:#2fb67c;--neg:#e2574c;--accent:#4a7dff}
@@ -31,7 +40,8 @@ _CSS = """
 --text:#111;--muted:#666}body{padding:0}.card{break-inside:avoid}}
 *{box-sizing:border-box}
 body{margin:0;padding:28px;background:var(--bg);color:var(--text);
-font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5}
+font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:0 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border)}
 .sub{color:var(--muted);font-size:13px}
 .wrap{max-width:1100px;margin:0 auto}

@@ -58,13 +58,20 @@ export async function applyTradeFilters() {
   try {
     params.set('limit', state.tradesPageSize);
     params.set('offset', state.tradesPage * state.tradesPageSize);
-    const cacheKey = params.toString();
+    // La clé porte l'« époque » du compte actif (voir config.js) en plus des
+    // filtres. Avant, elle ne contenait QUE les filtres : deux comptes
+    // différents consultés à moins de 30 s d'intervalle avec les mêmes
+    // filtres partageaient la même entrée, et le second se voyait servir les
+    // trades du premier. La purge au changement de compte corrigeait le cas
+    // courant, mais rien n'empêchait structurellement la collision — c'est
+    // maintenant impossible, même si un futur chemin oublie de purger.
+    const cacheKey = `a${state.accountEpoch}|${params.toString()}`;
     const cached = state.tradesCache.get(cacheKey);
     let data;
     if (cached && cached.expires > Date.now()) {
       data = cached.data;
     } else {
-      data = await apiGet(`/trades?${cacheKey}`);
+      data = await apiGet(`/trades?${params.toString()}`);
       state.tradesCache.set(cacheKey, { data, expires: Date.now() + 30000 });
     }
     if (requestId !== tradesRequestId) return;

@@ -6,57 +6,78 @@
 
   :root {
     /* ── Typographie ──────────────────────────────────────────────────────
-       Montserrat porte les titres, la navigation et les boutons : c'est la
-       voix de l'interface. Inter porte le texte courant, plus neutre et plus
-       lisible en petit corps.
-       DM Mono reste réservé aux CHIFFRES et aux tableaux denses : les
-       chasses fixes alignent les colonnes de prix et de P&L, ce qu'aucune
-       proportionnelle ne fait correctement. Ce n'est pas une troisième voix
-       typographique, c'est un outil de mise en tableau. */
-    --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --display: 'Montserrat', 'Inter', system-ui, sans-serif;
-    --mono: 'DM Mono', ui-monospace, 'SFMono-Regular', monospace;
+       Reprise du rapport HTML exporté, qu'on a demandé d'appliquer à toute
+       l'application — typographie comprise.
+
+       Le rapport n'a QU'UNE famille, la pile système :
+           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+       et aucune police de titre ni de chiffres. L'alignement des colonnes de
+       prix et de P&L y est obtenu par `font-variant-numeric: tabular-nums`
+       (voir base/reset.css), pas par une chasse fixe : les chiffres de la
+       pile système ont une variante tabulaire, elle suffit et évite une
+       troisième voix typographique.
+
+       Conséquence directe : plus aucune police Google à télécharger. Le
+       chargement distant a été retiré d'index.html — c'était la dernière
+       requête réseau émise par une page qui affiche des données de trading,
+       et le rapport, lui, se voulait explicitement autonome.
+
+       --display et --mono sont conservés (une cinquantaine de règles les
+       utilisent) mais pointent désormais sur la même pile : un seul endroit
+       à changer si la charte évolue. */
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --display: var(--font);
+    --mono: var(--font);
 
     /* ── Rayons ───────────────────────────────────────────────────────────
-       Correction charte : rayon fixe et quasi-carré partout, SAUF les
-       éléments réellement circulaires (spinner, puces, ronds de statut...)
-       qui utilisent `border-radius:50%` en dur dans leur règle et ne
-       dépendent donc pas de ces variables — ils gardent leur forme de
-       cercle intacte. */
-    --radius-lg: 1px;    /* cartes, tableaux, modales */
-    --radius: 1px;       /* boutons, champs, onglets */
-    --radius-sm: 1px;    /* éléments compacts */
-    --radius-xs: 1px;    /* badges, pastilles */
+       Repris du rapport HTML exporté (celui qu'on a demandé d'appliquer à
+       toute l'app) : cartes à 10px comme `.card`, éléments compacts à 8px
+       comme `.kpi`, et deux paliers dérivés pour le reste. Remplace la
+       correction « quasi-carré » précédente. */
+    --radius-lg: 10px;   /* cartes, tableaux, modales — comme .card du rapport */
+    --radius: 8px;       /* boutons, champs, onglets — comme .kpi du rapport */
+    --radius-sm: 6px;    /* éléments compacts */
+    --radius-xs: 5px;    /* badges, pastilles */
 
-    /* ── Échelle typographique ────────────────────────────────────────── */
-    /* Relevée à la demande utilisateur : l'échelle précédente (réduite de
-       20% par une demande produit antérieure) était devenue illisible,
-       notamment dans les tableaux denses de l'Analyzer. Valeurs choisies
-       pour rester nettement lisibles à l'écran tout en gardant les grilles
-       à 7-8 colonnes lisibles sans défilement horizontal à 1360px. */
-    --fs-2xs: 11px;
+    /* ── Échelle typographique ──────────────────────────────────────────
+       Calée sur les tailles réelles du rapport HTML : corps à 14px, tableaux
+       et libellés secondaires à 13px, étiquettes majuscules à 11px, h2 à
+       17px, valeur de KPI à 20px, h1 à 24px. Les deux paliers intermédiaires
+       (--fs-xs, --fs-md) comblent l'échelle pour les composants que le
+       rapport ne contient pas. */
+    --fs-2xs: 11px;     /* étiquettes en majuscules — .kpi-label, th */
     --fs-xs: 12px;
-    --fs-sm: 13px;
-    --fs-base: 14px;
+    --fs-sm: 13px;      /* cellules de tableau — td du rapport */
+    --fs-base: 14px;    /* corps de texte — body du rapport */
     --fs-md: 15px;
-    --fs-lg: 16.5px;
-    --fs-xl: 19px;
-    --fs-2xl: 25px;     /* valeurs de métrique principale */
-    --fs-3xl: 29px;     /* titre de page */
+    --fs-lg: 17px;      /* h2 du rapport */
+    --fs-xl: 20px;      /* .kpi-value du rapport */
+    --fs-2xl: 22px;     /* valeurs de métrique principale du dashboard */
+    --fs-3xl: 24px;     /* titre de page — h1 du rapport */
 
-    /* ── Couleurs de marque (identiques dans les deux thèmes) ──────────── */
-    --primary: #2563EB;
-    --primary-hover: #1D4ED8;
+    /* ── Couleurs de marque ──────────────────────────────────────────────
+       Reprises du rapport HTML exporté : --accent est SON bleu tel quel
+       (#4a7dff, la couleur qu'on a demandé de généraliser). --primary est
+       une version assombrie de ce même bleu — le rapport n'a qu'un seul
+       bleu, mais l'app en a besoin de deux : un pour le texte/les icônes
+       sur fond sombre (l'accent, tel quel), un pour les aplats pleins avec
+       texte blanc dessus (--primary, sinon le contraste tombe sous les
+       normes AA — 3,7:1 avec le bleu du rapport contre 6,7:1 avec cette
+       version assombrie). Violet et ambre inchangés : le rapport ne les
+       utilise pas, ils restent la charte existante. */
+    --primary: #3357B2;
+    --primary-hover: #2B4997;
     --on-primary: #FFFFFF;
     --violet: #8B5CF6;
     --amber: #F59E0B;
 
     /* ── Sémantique gain / perte ───────────────────────────────────────
-       Vert et rouge indépendants de la couleur de marque : en trading, ces
-       deux couleurs ont un sens fixe et ne doivent jamais servir d'accent
-       décoratif ailleurs. */
-    --pos: #10B981;
-    --neg: #EF4444;
+       Vert et rouge du rapport HTML, valeur par défaut (thème sombre) —
+       le thème clair les assombrit légèrement pour rester lisible sur
+       fond blanc (voir plus bas). En trading, ces deux couleurs ont un
+       sens fixe et ne doivent jamais servir d'accent décoratif ailleurs. */
+    --pos: #2FB67C;
+    --neg: #E2574C;
 
     /* Durée de transition unique, centralisée : un seul rythme pour toute
        l'interface, et un seul endroit à couper en « mouvement réduit ». */
@@ -64,53 +85,65 @@
   }
 
   /* ── Thème sombre (par défaut) ───────────────────────────────────────────
-     Le fond n'est pas un gris neutre mais un bleu très désaturé : il se
-     rattache à la couleur de marque et évite le rendu « terminal » d'un
-     #121212. Les surfaces montent en clarté avec l'élévation. */
+     Palette du rapport HTML exporté, reprise telle quelle (fond, surfaces,
+     bordure, texte, gris atténué) : c'est le thème qu'on a demandé de
+     généraliser à toute l'application. */
   :root, [data-theme="dark"] {
-    --bg: #0B0F14;
-    --surface: #111827;
-    --surface-2: #161F2E;       /* champs, survols, en-têtes de tableau */
-    --border: #1F2A3A;
-    --border2: #2E3C50;
-    --text: #E6EDF5;
+    --bg: #0F141C;
+    --surface: #161D28;
+    --surface-2: #1C2533;       /* champs, survols, en-têtes de tableau — .kpi du rapport */
+    --border: #27303F;
+    --border2: #364255;
+    --text: #E6EBF2;
     --text-title: #FFFFFF;
-    /* Le gris de la charte (#64748B) tombe sous le seuil AA sur ce fond :
-       on garde sa teinte en remontant la luminosité. */
-    --muted: #94A3B8;
-    /* Sur fond sombre, le bleu de marque manque de luminosité pour du texte
-       ou une icône : l'accent lisible est un bleu plus clair, tandis que les
-       aplats (boutons pleins) gardent --primary. */
-    --accent: #60A5FA;
-    --accent-dim: rgba(37,99,235,.18);
-    --primary-soft: rgba(37,99,235,.16);
-    --pos-dim: rgba(16,185,129,.14);
-    --neg-dim: rgba(239,68,68,.14);
-    --row-alt: rgba(148,163,184,.04);
-    --row-hover: rgba(148,163,184,.08);
-    --card-shadow: 0 1px 2px rgba(0,0,0,.4);
-    --card-shadow-lg: 0 12px 32px rgba(0,0,0,.45);
-    --overlay: rgba(3,7,12,.72);
+    --muted: #8B97A8;
+    /* Bleu du rapport, tel quel — lisible sur ce fond (contraste 5:1). */
+    --accent: #4A7DFF;
+    --accent-dim: rgba(51,87,178,.20);
+    --primary-soft: rgba(51,87,178,.18);
+    --pos-dim: rgba(47,182,124,.14);
+    --neg-dim: rgba(226,87,76,.14);
+    --row-alt: rgba(139,151,168,.04);
+    --row-hover: rgba(139,151,168,.08);
+    /* Plus discrètes que l'ancien thème : le rapport n'a pas d'ombre du
+       tout (juste une bordure) — on en garde une très légère pour séparer
+       les fenêtres modales du fond, sans revenir à un relief marqué. */
+    --card-shadow: 0 1px 2px rgba(0,0,0,.28);
+    --card-shadow-lg: 0 12px 32px rgba(0,0,0,.32);
+    --overlay: rgba(15,20,28,.72);
   }
 
-  /* ── Thème clair ──────────────────────────────────────────────────────── */
+  /* ── Thème clair ──────────────────────────────────────────────────────── 
+     Variante « impression » du rapport HTML (son unique déclinaison claire) :
+     fond et texte quasi noir/blanc, bordure neutre, même famille de gris. */
   [data-theme="light"] {
-    --bg: #F8FAFC;
+    --bg: #FAFBFC;
     --surface: #FFFFFF;
-    --surface-2: #F1F5F9;
-    --border: #E2E8F0;
-    --border2: #CBD5E1;
-    --text: #0F172A;
-    --text-title: #0F172A;
-    --muted: #64748B;
-    --accent: #2563EB;
-    --accent-dim: #EFF6FF;
-    --primary-soft: #EFF6FF;
-    --pos-dim: rgba(16,185,129,.12);
-    --neg-dim: rgba(239,68,68,.10);
-    --row-alt: rgba(100,116,139,.04);
-    --row-hover: rgba(37,99,235,.06);
-    --card-shadow: 0 1px 2px rgba(15,23,42,.05), 0 1px 3px rgba(15,23,42,.04);
-    --card-shadow-lg: 0 16px 40px rgba(15,23,42,.12);
-    --overlay: rgba(15,23,42,.45);
+    --surface-2: #F5F6F8;
+    --border: #D8DCE3;
+    --border2: #C1C9D4;
+    --text: #111111;
+    --text-title: #111111;
+    --muted: #666666;
+    /* Le bleu du rapport (#4a7dff) manque de contraste sur blanc (3,7:1,
+       sous le seuil AA de 4,5:1 pour du texte) : l'accent lisible réutilise
+       --primary, comme --accent-dim et --primary-soft ci-dessous. */
+    --accent: #3357B2;
+    --accent-dim: #F0F3F9;
+    --primary-soft: #F0F3F9;
+    /* Le vert/rouge du rapport, tels quels, tombent sous le seuil AA (4,5:1)
+       sur fond blanc — 2,6:1 et 3,7:1 respectivement, imperceptible pour un
+       texte de P&L qu'on doit pouvoir lire d'un coup d'œil. Assombris à
+       contraste identique (même teinte, mêmes usages) : le rapport lui-même
+       a ce problème en impression, ce n'est donc pas fidèle de le reproduire
+       ici où le thème clair est un vrai écran de travail, pas un PDF. */
+    --pos: #207F56;
+    --neg: #9E3C35;
+    --pos-dim: rgba(47,182,124,.12);
+    --neg-dim: rgba(226,87,76,.10);
+    --row-alt: rgba(102,102,102,.04);
+    --row-hover: rgba(51,87,178,.06);
+    --card-shadow: 0 1px 2px rgba(17,17,17,.05), 0 1px 3px rgba(17,17,17,.04);
+    --card-shadow-lg: 0 16px 40px rgba(17,17,17,.12);
+    --overlay: rgba(17,17,17,.45);
   }

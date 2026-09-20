@@ -14,24 +14,13 @@
     document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
   })();
 </script>
-<!-- Polices Google : chargement NON bloquant, et seulement si le poste est
-     en ligne. `media="print"` → `onload` fait passer la feuille en
-     chargement asynchrone ; les polices de repli (system-ui / monospace,
-     voir --font et --mono) s'appliquent en attendant, ou définitivement si
-     le réseau est absent. Le test `navigator.onLine` évite en plus
-     d'émettre une requête vouée à expirer sur une machine hors ligne : le
-     chargement de la page ne dépend en rien de ce fichier. -->
-<script>
-  (function() {
-    if (navigator.onLine === false) return;
-    var link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.media = 'print';
-    link.href = 'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Montserrat:wght@500;600;700&display=swap';
-    link.onload = function() { this.media = 'all'; };
-    document.head.appendChild(link);
-  })();
-</script>
+<!-- Aucune police distante. L'interface reprend la typographie du rapport
+     HTML exporté : la pile système (-apple-system / Segoe UI / Roboto), avec
+     des chiffres tabulaires pour aligner les colonnes (voir css/base/).
+     Le chargement Google Fonts qui se trouvait ici a été retiré : c'était la
+     dernière requête réseau émise par une page qui affiche des données de
+     trading, et elle révélait l'usage de l'application à un tiers à chaque
+     ouverture. L'application est désormais entièrement hors ligne. -->
 
 <!-- Chart.js servi EN LOCAL, sans aucun repli réseau : cette app est locale
      et doit fonctionner sans internet. Le fichier js/vendor/chart.umd.min.js
@@ -43,7 +32,7 @@
      Le dossier frontend/ entier est embarqué par PyInstaller (voir
      ("frontend", "frontend") dans TradingJournal.spec). -->
 <script defer src="js/vendor/chart.umd.min.js" onerror="window.__chartMissing = true;"></script>
-<link rel="stylesheet" href="css/styles.css?v=20260913-font">
+<link rel="stylesheet" href="css/styles.css?v=20260920-report-theme">
 </head>
 <body>
 

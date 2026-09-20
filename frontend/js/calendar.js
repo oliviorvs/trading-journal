@@ -142,8 +142,8 @@ function renderRHistogram(buckets) {
         } } },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10, family: 'DM Mono' } } },
-        y: { border: { display: false }, grid: { color: c.grid }, ticks: { precision: 0, font: { family: 'DM Mono' } } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { border: { display: false }, grid: { color: c.grid }, ticks: { precision: 0 } },
       },
     },
   });
@@ -171,8 +171,8 @@ function renderRiskDistribution(buckets) {
         } } },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10, family: 'DM Mono' } } },
-        y: { border: { display: false }, grid: { color: c.grid }, ticks: { precision: 0, font: { family: 'DM Mono' } } },
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { border: { display: false }, grid: { color: c.grid }, ticks: { precision: 0 } },
       },
     },
   });
@@ -221,9 +221,9 @@ function renderRolling(rolling) {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { labels: { color: c.muted } } },
       scales: {
-        x: { grid: { display: false }, ticks: { maxTicksLimit: 10, font: { family: 'DM Mono' } } },
-        y: { position: 'left', border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => v + '%', font: { family: 'DM Mono' } } },
-        y1: { position: 'right', border: { display: false }, grid: { display: false }, ticks: { callback: v => v + 'R', font: { family: 'DM Mono' } } },
+        x: { grid: { display: false }, ticks: { maxTicksLimit: 10 } },
+        y: { position: 'left', border: { display: false }, grid: { color: c.grid }, ticks: { callback: v => v + '%' } },
+        y1: { position: 'right', border: { display: false }, grid: { display: false }, ticks: { callback: v => v + 'R' } },
       },
     },
   });
