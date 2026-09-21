@@ -24,6 +24,8 @@ _STATUS_CLASS = {
     reliability.ROBUST: "st-strong",
 }
 
+_INSIGHT_LABEL = {"risque": "Point d'attention", "force": "Point fort", "info": "Constat"}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SOURCE DE VÉRITÉ DU THÈME.
 # Ces variables et cette typographie ne valent plus seulement pour le rapport :
@@ -156,7 +158,7 @@ def build_report(bundle: dict, account_label: str = "", currency: str = "") -> s
     titles = [
         ("setup", "Setups"), ("symbol", "Instruments"), ("session", "Sessions"),
         ("weekday", "Jours de la semaine"), ("hour", "Heures"),
-        ("emotion", "Émotions"), ("error", "Erreurs"),
+        ("exit_reason", "Sorties"), ("emotion", "Émotions"), ("error", "Erreurs"),
     ]
     for key, title in titles:
         block = dimensions.get(key)
@@ -164,6 +166,38 @@ def build_report(bundle: dict, account_label: str = "", currency: str = "") -> s
             continue
         sections.append(f'<div class="card"><h2>{title}</h2>'
                         f'{_rows_table(block.get("rows", []), title.rstrip("s"), currency)}</div>')
+
+    # Constats automatiques (insights.py) — placés tôt : ce sont les phrases
+    # qu'on veut lire avant de plonger dans les tableaux détaillés.
+    insights = bundle.get("insights") or []
+    if insights:
+        items = "".join(
+            f'<div class="rule"><div class="caveat">{escape(_INSIGHT_LABEL.get(item["kind"], "Constat"))}</div>'
+            f'<div><strong>{escape(item["title"])}</strong><br>{escape(item["text"])}</div></div>'
+            for item in insights
+        )
+        sections.append(f'<div class="card"><h2>Constats automatiques</h2>{items}</div>')
+
+    # Séries et drawdown du groupe — déjà calculés (voir behaviour.series)
+    # mais jusqu'ici jamais rendus dans ce rapport.
+    series = bundle.get("series") or {}
+    if series.get("longest_win") or series.get("longest_loss") or series.get("drawdowns"):
+        rows_html = "".join(
+            f"<tr><td>Du {escape(ep['from'])} au {escape(ep['trough'])}</td>"
+            f"<td>{_money(ep['depth'], currency)}</td>"
+            f"<td>{'Récupéré en ' + str(ep['trades_to_recover']) + ' trades' if ep['recovered'] else 'En cours'}</td></tr>"
+            for ep in (series.get("drawdowns") or [])
+        )
+        sections.append(
+            '<div class="card"><h2>Séries et drawdown</h2><div class="kpis">'
+            f'<div class="kpi"><div class="kpi-label">Plus longue série de gains</div>'
+            f'<div class="kpi-value">{series.get("longest_win", 0)}</div></div>'
+            f'<div class="kpi"><div class="kpi-label">Plus longue série de pertes</div>'
+            f'<div class="kpi-value">{series.get("longest_loss", 0)}</div></div>'
+            f'</div>'
+            + (f'<table style="margin-top:14px"><tr><th>Épisode</th><th>Creux</th><th>Récupération</th></tr>{rows_html}</table>' if rows_html else '')
+            + '</div>'
+        )
 
     # Coût des erreurs
     errors = bundle.get("errors") or {}

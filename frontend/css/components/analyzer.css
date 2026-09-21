@@ -100,6 +100,23 @@
   .symbol-map-row { display:grid; grid-template-columns:1fr auto 1fr auto; gap:8px; align-items:center; margin-bottom:8px; }
   .symbol-map-row .arrow { color:var(--muted); font-family:var(--mono); }
 
+  /* ── Constats automatiques (insights.py) ────────────────────────────── */
+  /* Même carte que `.rule-card`, coloration selon `kind` : un point
+     d'attention n'a pas la même urgence de lecture qu'un point fort. */
+  .rule-card.insight-risque { border-left-color:var(--neg); }
+  .rule-card.insight-force { border-left-color:var(--pos); }
+  .rule-card.insight-info { border-left-color:var(--primary); }
+
+  /* ── Résumé texte ────────────────────────────────────────────────────── */
+  .summary-toggle { display:flex; gap:7px; margin-bottom:14px; }
+  .summary-toggle button.active { background:var(--primary); color:#fff; border-color:var(--primary); }
+  .summary-text {
+    background:var(--surface-2); border:1px solid var(--border2); border-radius:var(--radius);
+    padding:14px 16px; font-family:var(--mono); font-size:var(--fs-sm); line-height:1.6;
+    color:var(--text); white-space:pre-wrap; word-break:break-word;
+    max-height:520px; overflow-y:auto; margin-bottom:12px;
+  }
+
   /* Empilement sous 1100 px : la contrainte de lisibilité porte sur
      1360×768, mais rien n'oblige à casser en dessous. */
   @media (max-width:1100px) {

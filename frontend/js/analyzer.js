@@ -126,6 +126,7 @@ const VIEWS = {
   discipline: renderDiscipline,
   psychology: renderPsychology,
   patterns: renderPatterns,
+  summary: renderSummary,
   report: renderReport,
   settings: renderSettings,
 };
@@ -538,6 +539,102 @@ export async function downloadAnalyzerExport(format) {
     showToast('Export téléchargé');
   } catch (error) {
     showToast(`Export impossible : ${error.message}`);
+  }
+}
+
+// ── Résumé texte (insights.py + text_report.py) ─────────────────────────────
+//
+// Deux longueurs générées côté serveur à partir du MÊME paquet d'analyses
+// que les autres onglets (voir routers/analyzer.py::get_summary) : basculer
+// entre « Synthèse » et « Rapport complet » ne refait donc AUCUNE requête,
+// les deux textes sont déjà en mémoire une fois l'onglet ouvert.
+let _summaryData = null;
+let _summaryMode = 'short';
+
+async function renderSummary() {
+  const data = await get('/summary');
+  _summaryData = data;
+  _summaryMode = 'short';
+
+  const insightCards = (data.insights || []).map(item => `
+    <div class="rule-card insight-${item.kind}">
+      <div class="rule-caveat">${escapeHtml(item.title)}</div>
+      <div class="rule-text">${escapeHtml(item.text)}</div>
+    </div>`).join('');
+
+  const actions = `<div class="filters" style="margin-bottom:16px">
+    <div class="summary-toggle">
+      <button class="btn-sync active" data-mode="short" onclick="switchAnalyzerSummaryMode('short',this)">Synthèse</button>
+      <button class="btn-sync" data-mode="full" onclick="switchAnalyzerSummaryMode('full',this)">Rapport complet</button>
+    </div>
+    <button class="btn-sync" onclick="copyAnalyzerSummary()">Copier</button>
+    <button class="btn-sync" onclick="downloadAnalyzerSummary()">Télécharger (.txt)</button>
+  </div>
+  <div class="analyzer-note" style="margin-bottom:16px">
+    Généré à partir des mêmes analyses que les autres onglets. Observations
+    chiffrées, pas des recommandations d'investissement — voir « Qualité des
+    données » avant d'en tirer une conclusion définitive.</div>`;
+
+  const insightsBlock = insightCards
+    ? `<div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-head"><span class="chart-title">Constats</span></div>
+        ${insightCards}</div>`
+    : '';
+
+  return actions + insightsBlock
+    + `<div class="chart-card">
+        <div class="chart-head"><span class="chart-title">Texte</span></div>
+        <pre id="summary-text-block" class="summary-text">${escapeHtml(data.short)}</pre>
+      </div>`;
+}
+
+export function switchAnalyzerSummaryMode(mode, button) {
+  if (!_summaryData) return;
+  _summaryMode = mode;
+  const block = document.getElementById('summary-text-block');
+  if (block) block.textContent = mode === 'full' ? _summaryData.full : _summaryData.short;
+  document.querySelectorAll('.summary-toggle button').forEach(b => b.classList.toggle('active', b === button));
+}
+
+export async function copyAnalyzerSummary() {
+  if (!_summaryData) return;
+  const text = _summaryMode === 'full' ? _summaryData.full : _summaryData.short;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Texte copié');
+  } catch (error) {
+    showToast('Copie impossible — sélectionnez le texte manuellement');
+  }
+}
+
+export async function downloadAnalyzerSummary(mode) {
+  mode = mode || _summaryMode;
+  const fq = filterQuery();
+  const path = `/analyzer/summary.txt?mode=${mode}${fq ? `&${fq.slice(1)}` : ''}`;
+  try {
+    const response = await fetchOrThrow(path);
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `resume-analyzer-${mode}.txt`;
+    const blob = await response.blob();
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_file) {
+      const encoded = await blobToBase64(blob);
+      const saved = await window.pywebview.api.save_file(filename, encoded, 'Texte');
+      showToast(saved ? 'Fichier enregistré' : 'Enregistrement annulé');
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    showToast('Résumé téléchargé');
+  } catch (error) {
+    showToast(`Téléchargement impossible : ${error.message}`);
   }
 }
 

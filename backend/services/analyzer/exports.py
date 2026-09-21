@@ -114,6 +114,13 @@ def build_tables(bundle: dict) -> Dict[str, List[List]]:
             table.append([row["field"], row["filled"], row["missing"], row["coverage"]])
         tables["Qualité des données"] = table
 
+    insights = bundle.get("insights") or []
+    if insights:
+        tables["Constats automatiques"] = [["Type", "Titre", "Constat", "n"]] + [
+            [item["kind"], item["title"], item["text"], item.get("trades")]
+            for item in insights
+        ]
+
     return tables
 
 

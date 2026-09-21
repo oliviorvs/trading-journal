@@ -21,10 +21,12 @@ from sqlalchemy.orm import Session
 from database import get_db
 from services.analyzer import config as analyzer_config
 from services.analyzer import exports as exports_mod
+from services.analyzer import insights as insights_mod
 from services.analyzer import playbook as playbook_mod
 from services.analyzer import report as report_mod
 from services.analyzer import sessions as sessions_mod
 from services.analyzer import sop as sop_mod
+from services.analyzer import text_report as text_report_mod
 from services.analyzer.adapter import Filters, JournalDataAdapter
 from services.analyzer.analyzers import (
     behaviour, data_quality, dimensions, discipline, patterns, performance, psychology,
@@ -171,7 +173,13 @@ def get_data_quality(params: dict = Depends(common_filters), db: Session = Depen
 
 # ── Paquet complet (rapport, exports, règles) ───────────────────────────────
 
-REPORT_DIMENSIONS = ["setup", "symbol", "session", "weekday", "hour", "emotion", "error"]
+# `exit_reason` a été AJOUTÉ à cette liste : la répartition SL / TP / sortie
+# manuelle est une dimension qui existait déjà (dimensions.py la calcule sans
+# saisie supplémentaire), mais qu'aucun rapport ni export ne reprenait. C'est
+# pourtant l'un des constats les plus lisibles d'un journal — combien du
+# résultat vient de chaque type de sortie — et le point de départ du constat
+# automatique `insights._exit_contribution`.
+REPORT_DIMENSIONS = ["setup", "symbol", "session", "weekday", "hour", "emotion", "error", "exit_reason"]
 
 
 def _bundle(db: Session, filters: Filters, base: Optional[str]) -> dict:
@@ -199,6 +207,11 @@ def _bundle(db: Session, filters: Filters, base: Optional[str]) -> dict:
         "base": resolved,
         "account_id": dataset.account_id,
     }
+    # Constats automatiques (insights.py) : lus après coup à partir des blocs
+    # ci-dessus, JAMAIS recalculés séparément — voir la garantie « une seule
+    # lecture, toutes les analyses » en tête de ce fichier.
+    bundle["insights"] = insights_mod.compute(dataset, bundle, resolved,
+                                              state.get_settings(db).currency or "")
     bundle["rules"] = playbook_mod.suggest(
         bundle["patterns"], bundle["errors"], bundle["frequency"], dataset.filters
     )
@@ -220,6 +233,50 @@ def get_report(params: dict = Depends(common_filters), db: Session = Depends(get
     return HTMLResponse(
         content=html,
         headers={"Content-Disposition": 'attachment; filename="rapport-analyzer.html"'},
+    )
+
+
+@router.get("/summary")
+def get_summary(params: dict = Depends(common_filters), db: Session = Depends(get_db)):
+    """Constats automatiques + rapport texte (synthèse courte et complet),
+    pour prévisualisation à l'écran avant copie ou téléchargement.
+
+    Les deux textes sont générés dans le MÊME appel que les constats : les
+    régénérer séparément au clic sur « copier » recalculerait tout un
+    `bundle` pour rien (le cache de l'adaptateur l'éviterait, mais autant ne
+    pas en dépendre côté route).
+    """
+    dataset = JournalDataAdapter.load(db, params["filters"])
+    bundle = _bundle(db, params["filters"], params["base"])
+    account = state.get_active_account(db)
+    label = (account.label or account.name or str(account.login)) if account else ""
+    currency = state.get_settings(db).currency or ""
+    insights = bundle["insights"]
+    return {
+        "insights": insights,
+        "short": text_report_mod.build_short(bundle, insights, label, currency),
+        "full": text_report_mod.build_full(bundle, insights, label, currency, dataset.views),
+    }
+
+
+@router.get("/summary.txt")
+def get_summary_txt(mode: str = Query("short", pattern="^(short|full)$"),
+                     params: dict = Depends(common_filters), db: Session = Depends(get_db)):
+    dataset = JournalDataAdapter.load(db, params["filters"])
+    bundle = _bundle(db, params["filters"], params["base"])
+    account = state.get_active_account(db)
+    label = (account.label or account.name or str(account.login)) if account else ""
+    currency = state.get_settings(db).currency or ""
+    insights = bundle["insights"]
+    text = (
+        text_report_mod.build_full(bundle, insights, label, currency, dataset.views)
+        if mode == "full" else
+        text_report_mod.build_short(bundle, insights, label, currency)
+    )
+    filename = f"resume-analyzer-{mode}.txt"
+    return Response(
+        content=text, media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

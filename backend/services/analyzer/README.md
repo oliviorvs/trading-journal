@@ -37,10 +37,12 @@ backend/services/analyzer/
 ├── playbook.py     règles proposées
 ├── report.py       rapport HTML autonome
 ├── exports.py      JSON / CSV / XLSX
+├── insights.py     Analyse 15 — constats automatiques chiffrés (pas de comparaison de groupes)
+├── text_report.py  rapport en texte brut (synthèse courte + rapport complet)
 └── analyzers/      performance · dimensions · psychology · behaviour ·
                     discipline · patterns · data_quality
 backend/routers/analyzer.py     endpoints /api/analyzer/*
-frontend/js/analyzer.js         panneau à 10 sous-onglets, chargé à la demande
+frontend/js/analyzer.js         panneau à 11 sous-onglets, chargé à la demande
 frontend/css/components/analyzer.css
 ```
 
@@ -85,6 +87,20 @@ D1 brut **et** net, défaut brut · D2 pas de Pandas · D3 sessions en heure
 serveur · D4 mémorisation en mémoire · D5 SOP à 6 éléments configurable ·
 D6 émotions/erreurs multiples · D7 un onglet + sous-onglets · D8 WAL et
 sauvegarde **hors périmètre** · D9 statut plafonné si l'intervalle contient 0.
+
+## Onglet « Résumé » et constats automatiques (insights.py)
+
+Ajouté après coup, à partir de deux rapports produits manuellement par
+l'utilisateur en lisant un historique brut de 42 trades. Leurs sections les
+plus utiles (ratio gain/perte, série de pertes, perte exceptionnelle,
+contribution des sorties manuelles, concentration du résultat sur deux
+instruments) sont des faits arithmétiques sur le groupe ENTIER — aucun n'a
+besoin de setup, d'émotion ou de SOP renseignés. `insights.py` les calcule
+une fois par `bundle` (voir `_bundle()` dans le router) et `text_report.py`
+les met en phrases, dans deux longueurs. Différence volontaire avec
+`patterns.py` : ici il n'y a qu'un seul groupe (le portefeuille entier), donc
+pas d'intervalle de confiance ni de statut de fiabilité — seulement un fait
+chiffré, avec son `n`, jamais présenté comme une règle (R8 toujours).
 
 ## Écarts assumés par rapport au cahier v2
 
