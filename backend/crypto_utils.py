@@ -35,15 +35,7 @@ def _load_or_create_key() -> bytes:
 
 
 def _init_fernet() -> Fernet:
-    """Initialise Fernet à partir de la clé stockée.
 
-    Correction : auparavant, un fichier `.secret_key` vide ou corrompu
-    (ex. copie interrompue, édition accidentelle) faisait planter l'API
-    entière au démarrage avec une exception brute de la librairie
-    `cryptography`, sans indication de la cause ni de la solution. On
-    intercepte maintenant cette erreur pour échouer avec un message
-    explicite et une marche à suivre, plutôt qu'un crash opaque.
-    """
     key_path = os.path.abspath(_KEY_PATH)
     try:
         return Fernet(_load_or_create_key())

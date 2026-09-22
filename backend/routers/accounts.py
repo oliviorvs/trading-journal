@@ -1,13 +1,3 @@
-"""Routes des comptes MANUELS (mode = "manual") : aucune connexion MT5.
-
-Voir Recap-structure-manuel-import.md (sections 2, 4 et 5).
-- « Manuel avec import » et « full manuel » créent le MÊME type de compte ;
-  seule la porte d'entrée de l'assistant côté interface diffère.
-- Le compte est identifié par un login synthétique négatif (voir
-  state.next_manual_login) : filter_active, la suppression de compte et le
-  calendrier fonctionnent donc sans modification.
-- La limite de comptes (MAX_SAVED_ACCOUNTS) est partagée avec les comptes MT5.
-"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import timezone

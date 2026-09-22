@@ -28,13 +28,7 @@ def get_db():
         db.close()
 
 def run_light_migrations():
-    """Migrations légères pour SQLite (pas d'Alembic dans ce projet).
 
-    N'ajoute que les colonnes manquantes sur des tables déjà existantes,
-    sans jamais recréer ni vider la base. Idempotent : sans effet si la
-    colonne existe déjà. Les nouvelles tables (ex. Settings) sont créées
-    séparément par `Base.metadata.create_all()`.
-    """
     from sqlalchemy import inspect, text
 
     inspector = inspect(engine)
@@ -88,13 +82,7 @@ def run_light_migrations():
             table_sql = conn.execute(text(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name='trades'"
             )).scalar() or ""
-            # Correction : la comparaison était `"UNIQUE (ticket)" in table_sql.upper()`
-            # — minuscules contre majuscules, donc JAMAIS vraie : la table n'était
-            # jamais reconstruite et une base ancienne gardait UNIQUE(ticket)
-            # (deux comptes ne pouvaient pas partager un ticket ; un import d'un
-            # rapport dont les tickets existent déjà en base levait une erreur
-            # d'intégrité). On détecte la contrainte, écrite en table ou en
-            # colonne, sur le texte mis en majuscules des deux côtés.
+
             if re.search(r"UNIQUE\s*\(\s*TICKET\s*\)|\bTICKET\s+INTEGER\b[^,]*\bUNIQUE\b", table_sql.upper()):
                 conn.execute(text("ALTER TABLE trades RENAME TO trades_legacy"))
                 conn.execute(text("""
@@ -180,24 +168,8 @@ def run_light_migrations():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE settings ADD COLUMN error_types TEXT"))
 
-    # Correction : les deux rattrapages ci-dessous portent sur la table
-    # `accounts`, mais étaient imbriqués dans le bloc `if "settings" in
-    # existing_tables`. Deux conséquences :
-    #   1. `account_columns` n'existait pas si la table `accounts` était
-    #      absente alors que `settings` existait → NameError au démarrage,
-    #      donc API qui refuse de se lancer, migrations interrompues à
-    #      mi-parcours ;
-    #   2. sur une base sans table `settings` (installation ancienne), le
-    #      rattrapage du compte actif n'était jamais exécuté → dashboard vide
-    #      après mise à jour.
-    # Ils sont désormais rattachés à la bonne table.
     if "accounts" in existing_tables:
-        # Rétrocompatibilité : un compte qui a déjà des trades importés
-        # (donc déjà synchronisé au moins une fois avant l'ajout de cette
-        # colonne) est nécessairement passé par l'ancien comportement
-        # "import complet" — on le marque "historical" pour ne pas le
-        # bloquer par le nouveau garde-fou de sync_trades() (voir main.py),
-        # qui refuse de tourner tant que initialization_mode est vide.
+
         if "initialization_mode" not in account_columns and "trades" in existing_tables:
             with engine.begin() as conn:
                 conn.execute(text(
@@ -205,12 +177,7 @@ def run_light_migrations():
                     "WHERE initialization_mode IS NULL AND last_sync IS NOT NULL "
                     "AND EXISTS (SELECT 1 FROM trades WHERE trades.account_id = accounts.login)"
                 ))
-        # Un compte pré-existant (créé avant la gestion multi-comptes) n'a
-        # jamais eu `is_active` défini : sans ce rattrapage, un utilisateur
-        # qui avait déjà un compte connecté verrait un dashboard vide après
-        # la mise à jour (plus aucun compte marqué actif => filtre sur un
-        # login inexistant). On active le compte le plus récemment
-        # synchronisé s'il n'y en a aucun d'actif.
+
         with engine.begin() as conn:
             has_active = conn.execute(text("SELECT COUNT(*) FROM accounts WHERE is_active = 1")).scalar()
             if not has_active:
@@ -236,17 +203,7 @@ def run_light_migrations():
 
 
 def _backfill_attachment_accounts() -> None:
-    """Rattache chaque pièce jointe encore sans compte au(x) compte(s) qui
-    portent réellement son ticket. Idempotent (ne traite que `account_id IS
-    NULL`).
 
-    - un seul compte porte le ticket : la pièce lui est attribuée ;
-    - plusieurs comptes le portent (ancien partage silencieux) : la pièce
-      reste au premier (plus petit login) et CHAQUE autre compte reçoit sa
-      propre COPIE du fichier — isolation complète, aucune capture perdue ;
-    - aucun trade ne porte plus ce ticket (pièce orpheline) : laissée sans
-      compte, donc inaccessible depuis l'interface.
-    """
     import shutil
     import uuid
     from sqlalchemy import text

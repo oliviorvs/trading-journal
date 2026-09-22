@@ -10,14 +10,6 @@ from models import AppAuth
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-
-# Longueur minimale portée de 4 à 6 (audit sécurité) : le champ est saisi au
-# pavé numérique, 4 chiffres ne font que 10 000 combinaisons. Le verrouillage
-# progressif (voir auth_utils) tient en ligne, mais ses compteurs vivent en
-# mémoire process et repartent à zéro à chaque redémarrage du backend — la
-# longueur du secret est donc la vraie défense.
-# Ne s'applique qu'à la CRÉATION et à la RÉINITIALISATION : un code plus court
-# déjà enregistré continue de fonctionner (LoginBody n'impose aucun minimum).
 MIN_CODE_LENGTH = 6
 
 

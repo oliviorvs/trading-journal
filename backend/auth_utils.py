@@ -1,36 +1,3 @@
-"""
-Authentification de l'écran de verrouillage — gérée côté backend (correctif
-audit UI/UX : le message "ESPACE PRIVÉ" laissait entendre une vraie
-protection, alors que tout se passait avant côté navigateur — hash SHA-256
-non salé calculé en JS, comparé à une valeur lue dans le localStorage — et
-que l'API /api/* répondait sans aucun contrôle à quiconque pouvait
-l'atteindre sur 127.0.0.1:8000, y compris en contournant la page (curl, un
-autre onglet, DevTools...).
-
-Ce module :
-- hache le code d'accès et le code de récupération avec PBKDF2-HMAC-SHA256
-  salé (jamais de SHA-256 nu : sans salage ni ralentissement délibéré, un
-  hash de code court se retrouve/se force en un temps négligeable) ; le
-  code en clair ne transite qu'une fois, sur la requête de vérification,
-  et n'est jamais stocké ;
-- délivre un jeton de session opaque une fois le code vérifié, gardé en
-  mémoire process (perdu si le backend redémarre — cohérent avec le
-  comportement précédent, qui redemandait déjà le code à chaque lancement
-  de l'app, puisque rien ne persistait la classe "déverrouillé" elle-même) ;
-- expose verify_session(), utilisé par le middleware global (voir main.py)
-  qui bloque désormais tout /api/* (hors /api/auth/*) et /uploads/* sans
-  jeton valide — c'est ce qui manquait avant : la vraie faille n'était pas
-  la solidité du hash, mais l'absence totale de contrôle côté serveur ;
-- limite grossièrement les tentatives successives (code d'accès et code de
-  récupération), avec un recul exponentiel plafonné.
-
-Limite assumée et documentée, comme dans crypto_utils.py : cette app tourne
-en local, mono-utilisateur. Ce mécanisme protège contre un tiers qui
-ouvrirait l'app ou enverrait des requêtes à 127.0.0.1:8000 par-dessus
-l'épaule de l'utilisateur ou depuis un autre programme sur la même
-machine — pas contre quelqu'un ayant un accès complet et durable au poste
-(aucune protection purement locale ne peut s'en prémunir).
-"""
 import hashlib
 import hmac
 import os
