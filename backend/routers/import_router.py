@@ -1,18 +1,3 @@
-"""Routes d'import de fichiers (étape 4) — voir Recap-structure-manuel-import.md.
-
-Assistant en deux temps, cohérent avec la section 7 (« Assistant d'import ») :
-
-1. POST /api/import/preview — lit le fichier, renvoie un aperçu (trades
-   détectés, erreurs ligne par ligne, contrôles d'intégrité). Pour un CSV
-   générique sans `mapping`, renvoie d'abord les en-têtes détectés pour
-   l'écran de correspondance de colonnes ; rien n'est écrit en base.
-2. POST /api/import/commit — écrit les trades valides et non-doublons du
-   jeton d'aperçu (et les dépôts / retraits du rapport), dans le compte manuel actif (ou un nouveau compte créé au
-   passage).
-
-GET /api/import/batches et DELETE /api/import/batch/{id} permettent de lister
-puis d'annuler un lot d'import entier sur le compte actif (section 5).
-"""
 import json
 from typing import List, Optional
 

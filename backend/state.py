@@ -600,9 +600,45 @@ def _snapshot_cycle(force: bool = False) -> bool:
         return False
 
 
+def _trade_sync_cycle() -> int:
+    """Importe les trades clôturés (et met à jour les positions ouvertes) du
+    compte MT5 actif, tant que le terminal est connecté à CE compte.
+
+    Correction (« le solde bouge mais les trades clôturés n'apparaissent pas ») :
+    la boucle de fond ne faisait que reconnecter et relever l'équité — la
+    synchronisation des trades n'avait lieu qu'au démarrage, à une
+    reconnexion, ou sur clic du bouton « Synchroniser ». Un trade clôturé
+    pendant que l'app restait connectée n'était donc jamais importé tout seul,
+    alors que le relevé d'équité (donc le solde) continuait d'avancer.
+
+    Comme les autres cycles, celui-ci ne peut jamais lancer MT5 : il n'agit que
+    si la connexion est déjà établie. Non bloquant : si une synchro est déjà en
+    cours (bouton manuel), ce tour est simplement sauté.
+    """
+    if mt5.is_simulated() or not mt5.is_connected():
+        return 0
+    try:
+        with SessionLocal() as db:
+            account = get_active_account(db)
+            if not account or is_manual(account) or not account.initialization_mode:
+                return 0
+            if mt5.current_login != account.login:
+                return 0
+            return mt5.sync_trades(db, blocking=False)
+    except RuntimeError as exc:
+        # Échec ponctuel et attendu (historique illisible, terminal basculé sur
+        # un autre compte…) : le tour suivant réessaie, pas de trace complète.
+        logger.warning("Synchronisation automatique des trades interrompue : %s", exc)
+        return 0
+    except Exception:
+        logger.exception("Synchronisation automatique des trades échouée")
+        return 0
+
+
 def passive_reconnect_worker() -> None:
     while not _passive_reconnect_stop.wait(PASSIVE_RECONNECT_POLL_S):
         _passive_reconnect_cycle()
+        _trade_sync_cycle()
         _snapshot_cycle()
 
 

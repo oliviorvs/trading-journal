@@ -316,6 +316,9 @@ def mt5_status():
         "loading": state.mt5.is_loading(),
         "simulated": state.mt5.is_simulated(),
         "last_error": state.mt5.last_error(),
+        # Change quand la synchro de fond a importé/clôturé un trade ou vu un
+        # dépôt/retrait : l'interface s'en sert pour se recharger seule.
+        "sync_version": state.mt5.data_version,
     }
 
 

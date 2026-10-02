@@ -51,6 +51,8 @@ function setConnectCardCollapsed(collapsed) {
 
 let _pollTimer = null;
 let _wasConnected = false;
+// Dernière version de données vue via /api/mt5/status (null = pas encore lue).
+let _lastSyncVersion = null;
 
 // Démarre/arrête le polling selon la visibilité de l'onglet/fenêtre.
 // Correction : le setInterval tournait auparavant en continu même fenêtre
@@ -476,6 +478,7 @@ export async function refreshMT5State() {
   const demoWarning = document.getElementById('demo-warning');
 
   let connected = false, simulated = false, lastError = null, loading = false;
+  let syncVersion = null;
   let apiReachable = true;
   try {
     const r = await fetch(`${API}/mt5/status`);
@@ -488,6 +491,7 @@ export async function refreshMT5State() {
     simulated = !!s.simulated;
     loading = !!s.loading;
     lastError = s.last_error || null;
+    syncVersion = (typeof s.sync_version === 'number') ? s.sync_version : null;
   } catch(e) {
     // API injoignable ou réponse d'erreur : on ne peut pas prétendre être connecté
     connected = false;
@@ -503,8 +507,19 @@ export async function refreshMT5State() {
 
   if (connected && !_wasConnected) {
     _wasConnected = true;
+    if (syncVersion !== null) _lastSyncVersion = syncVersion;
     await loadAccountInfo();
     await loadAll();
+  } else if (connected && syncVersion !== null) {
+    // La synchro de fond (backend) a importé un trade clôturé, ouvert une
+    // position ou vu un dépôt/retrait : on recharge le journal sans clic.
+    if (_lastSyncVersion !== null && syncVersion !== _lastSyncVersion) {
+      _lastSyncVersion = syncVersion;
+      await loadAccountInfo();
+      await loadAll();
+    } else {
+      _lastSyncVersion = syncVersion;
+    }
   }
 
   if (!connected) {

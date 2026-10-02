@@ -5,7 +5,7 @@ Utilise la librairie officielle MetaTrader5 (Windows uniquement).
 import logging
 import os
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,12 @@ MT5_IMPORT_TIMEOUT = 30.0
 # elle aussi tomber sur un terminal injoignable, et ne doit pas non plus
 # geler l'interface en l'attendant.
 MT5_INITIALIZE_TIMEOUT_MS = 3000
+
+# ── Fenêtre de lecture de l'historique (voir MT5Service._sync_trades_locked) ──
+# Recouvrement vers le passé à chaque synchro, et marge vers le futur : les
+# horodatages des deals sont en heure du serveur du courtier, pas en UTC.
+SYNC_OVERLAP = timedelta(days=3)
+SYNC_FUTURE_MARGIN = timedelta(days=1)
 
 # ── Détection du terminal MT5 SANS passer par l'API MetaTrader5 ─────────────
 #
@@ -196,6 +202,17 @@ class MT5Service:
         #         lieu.
         self._last_error_kind: Optional[str] = None
         self._last_error_detail: Optional[str] = None
+        # Une seule synchronisation de trades à la fois (bouton manuel +
+        # boucle de fond), sinon doublons de tickets possibles.
+        self._sync_lock = threading.Lock()
+        # Incrémenté quand une synchro change des données visibles (nouveau
+        # trade, clôture, dépôt/retrait). Exposé par /api/mt5/status pour que
+        # l'interface se recharge toute seule.
+        self._data_version = 0
+
+    @property
+    def data_version(self) -> int:
+        return self._data_version
 
     def connect(self, login: int, password: str, server: str) -> bool:
         # Action explicite de l'utilisateur (ou reconnexion automatique en
@@ -407,27 +424,99 @@ class MT5Service:
             "simulated": False,
         }
 
-    def sync_trades(self, db: Session) -> int:
+    def sync_trades(self, db: Session, blocking: bool = True) -> int:
+        """Synchronise positions ouvertes + historique clôturé du compte connecté.
 
+        `blocking=True` (bouton « Synchroniser », reconnexion) attend la fin
+        d'une synchro éventuellement déjà en cours ; `blocking=False` (boucle
+        de fond, voir state._trade_sync_cycle) abandonne simplement le tour si
+        une synchro tourne déjà — sans verrou, deux synchros concomitantes
+        pouvaient insérer le même ticket deux fois (contrainte d'unicité).
+        Retourne le nombre de trades nouveaux ou nouvellement clôturés.
+        """
         api = mt5_module()
         if api is None:
             return self._seed_demo_data(db)
+        if not self._sync_lock.acquire(blocking=blocking):
+            logger.debug("Synchronisation MT5 ignorée : une autre est déjà en cours")
+            return 0
+        try:
+            return self._sync_trades_locked(api, db)
+        finally:
+            self._sync_lock.release()
 
+    @staticmethod
+    def _add_deal(api, group: dict, deal) -> None:
+        """Range un deal dans les entrées / sorties d'une position."""
+        entry = deal.entry
+        if entry == api.DEAL_ENTRY_IN:
+            group["ins"].append(deal)
+        elif entry == api.DEAL_ENTRY_OUT or entry == getattr(api, "DEAL_ENTRY_OUT_BY", -1):
+            group["outs"].append(deal)
+
+    @staticmethod
+    def _position_deals(api, position_id: int) -> dict:
+        """TOUS les deals d'une position, sans dépendre d'une fenêtre de dates
+        (`history_deals_get(position=...)`). Source de vérité pour agréger une
+        position : la fenêtre incrémentale peut n'en contenir qu'une partie."""
+        group = {"ins": [], "outs": []}
+        try:
+            deals = api.history_deals_get(position=position_id)
+        except Exception:
+            logger.debug("history_deals_get(position=%s) indisponible", position_id, exc_info=True)
+            return group
+        for deal in deals or ():
+            MT5Service._add_deal(api, group, deal)
+        return group
+
+    @staticmethod
+    def _initial_stop(api, position_id: int) -> Optional[float]:
+        """Premier SL non nul posé sur un ordre de cette position (= SL initial)."""
+        try:
+            orders = api.history_orders_get(position=position_id) or ()
+        except Exception:
+            logger.debug("history_orders_get(position=%s) indisponible", position_id, exc_info=True)
+            return None
+        for order in sorted(orders, key=lambda item: getattr(item, "time_setup", 0)):
+            stop_loss = getattr(order, "sl", 0)
+            if stop_loss:
+                return stop_loss
+        return None
+
+    def _sync_trades_locked(self, api, db: Session) -> int:
         account = db.query(Account).filter(Account.login == self._login).first()
-        from_date = account.last_sync if (account and account.last_sync) else datetime(2000, 1, 1, tzinfo=timezone.utc)
-        if from_date.tzinfo is None:
-            # `last_sync` est stocké naïf (colonne DateTime SQLite, voir
-            # commentaire de `_utcnow` côté main.py) mais représente bien un
-            # instant UTC : on lui rattache le fuseau avant de le passer à
-            # l'API MT5.
-            from_date = from_date.replace(tzinfo=timezone.utc)
+        last_sync = account.last_sync if (account and account.last_sync) else datetime(2000, 1, 1)
+        if last_sync.tzinfo is None:
+            # `last_sync` est stocké naïf (colonne DateTime SQLite) mais
+            # représente bien un instant UTC : on lui rattache le fuseau.
+            last_sync = last_sync.replace(tzinfo=timezone.utc)
 
-        # Garde d'ISOLATION : le terminal MT5 n'a qu'UNE session, et l'utilisateur
-        # peut l'avoir basculée sur un autre compte depuis le terminal
-        # lui-même. Sans cette vérification, les positions et deals de ce
-        # compte-là seraient écrits sous le login du compte du journal, et
-        # `_sync_account` écraserait la ligne d'un compte avec les chiffres
-        # d'un autre.
+        # ── Fenêtre de lecture de l'historique ─────────────────────────
+        # Correction (trades clôturés récemment absents du journal) :
+        #  - AVANT : fenêtre [last_sync, maintenant UTC]. Or les horodatages
+        #    des deals MT5 sont en heure du SERVEUR du courtier (typiquement
+        #    UTC+2/+3) : un trade clôturé il y a moins de ~3 h portait une
+        #    date « dans le futur » par rapport à `maintenant UTC` et sortait
+        #    de la fenêtre. Pire, le tour suivant repartait de `last_sync`,
+        #    donc un trade dont l'entrée était dans un lot et la sortie dans
+        #    le suivant était perdu pour de bon (« sortie sans entrée »).
+        #  - MAINTENANT : borne haute = maintenant + 1 jour (couvre tous les
+        #    fuseaux de courtier) et borne basse reculée de SYNC_OVERLAP. Le
+        #    recouvrement est sans risque : tickets et deals « balance » sont
+        #    dédoublonnés, et une position déjà à jour est ignorée.
+        from_date = last_sync - SYNC_OVERLAP
+        start = account.start_date if account else None
+        if start is not None:
+            if start.tzinfo is None:
+                start = start.replace(tzinfo=timezone.utc)
+            if from_date < start:
+                from_date = start  # jamais avant la date de départ choisie
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        to_date = datetime.now(timezone.utc) + SYNC_FUTURE_MARGIN
+
+        # Garde d'ISOLATION : le terminal MT5 n'a qu'UNE session, et
+        # l'utilisateur peut l'avoir basculée sur un autre compte depuis le
+        # terminal lui-même.
         terminal_info = self.get_account_info()
         terminal_login = terminal_info.get("login") if terminal_info else None
         if self._login and terminal_login and terminal_login != self._login:
@@ -438,10 +527,8 @@ class MT5Service:
 
         self._sync_account(db)
 
-        to_date_naive = datetime.now(timezone.utc).replace(tzinfo=None)
-        to_date = to_date_naive.replace(tzinfo=timezone.utc)
-
         count = 0
+        changed = False  # changement visible par l'interface (voir data_version)
 
         # ── Phase A — positions actuellement ouvertes ───────────────────
         open_tickets: set = set()
@@ -449,9 +536,6 @@ class MT5Service:
         if open_positions:
             for pos in open_positions:
                 open_tickets.add(pos.ticket)
-                # Taille du pip demandée à MT5 pour CE symbole (voir
-                # services/pips.py) — l'ancienne règle "10000 sauf JPY"
-                # faussait complètement les métaux, indices et crypto.
                 pips = price_to_pips(pos.price_current - pos.price_open, pos.symbol, api)
 
                 existing = db.query(Trade).filter(
@@ -462,22 +546,14 @@ class MT5Service:
                     # Trade saisi / importé : la synchro ne le modifie jamais.
                     continue
                 if existing:
+                    if not existing.is_open:
+                        changed = True  # trade « rouvert » côté courtier
                     existing.profit = pos.profit
                     existing.close_price = pos.price_current
                     existing.sl = pos.sl or None
-                    # Correction : `initial_sl` n'était renseigné qu'à la
-                    # CRÉATION de la ligne. Si la position était déjà
-                    # synchronisée avant que le stop ne soit placé (cas
-                    # courant : on entre, puis on pose le SL quelques
-                    # secondes plus tard), `initial_sl` restait NULL
-                    # définitivement. Or c'est la seule donnée qui permet de
-                    # calculer le R-multiple et le risque : sans elle, les
-                    # tableaux "distribution des R" et "distribution du
-                    # risque" restaient désespérément vides.
-                    # On le renseigne donc rétroactivement au premier stop
-                    # observé — et jamais ensuite, pour qu'un déplacement de
-                    # stop (breakeven, trailing) ne réécrive pas le risque
-                    # initial.
+                    # `initial_sl` renseigné rétroactivement au premier stop
+                    # observé, jamais ensuite (breakeven/trailing ne doivent
+                    # pas réécrire le risque initial).
                     if existing.initial_sl is None and pos.sl:
                         existing.initial_sl = pos.sl
                     existing.tp = pos.tp or None
@@ -490,7 +566,7 @@ class MT5Service:
                             api, pos.symbol, "buy" if pos.type == 0 else "sell",
                             pos.volume, pos.price_open)
                 else:
-                    trade = Trade(
+                    db.add(Trade(
                         ticket=pos.ticket,
                         account_id=self._login,
                         symbol=pos.symbol,
@@ -510,161 +586,161 @@ class MT5Service:
                             api, pos.symbol, "buy" if pos.type == 0 else "sell",
                             pos.volume, pos.price_open),
                         is_open=True,
-                    )
-                    db.add(trade)
+                    ))
                     count += 1
+                    changed = True
 
-        # ── Phase B — historique des deals (fenêtre incrémentale) ───────
+        # ── Phase B — historique des deals (fenêtre glissante) ──────────
         deals = api.history_deals_get(from_date, to_date)
         if deals is None:
             logger.error("history_deals_get failed for account %s: %s", self._login, api.last_error())
             raise RuntimeError(
                 "Lecture de l'historique MT5 impossible; la prochaine synchronisation réessaiera la même fenêtre"
             )
-        initial_stops = {}
-        if deals:
-            orders = api.history_orders_get(from_date, to_date) or []
-            for order in sorted(orders, key=lambda item: getattr(item, "time_setup", 0)):
-                position_id = getattr(order, "position_id", 0)
-                stop_loss = getattr(order, "sl", 0)
-                if position_id and stop_loss and position_id not in initial_stops:
-                    initial_stops[position_id] = stop_loss
-        if deals:
-            positions: dict = {}
-            # Phase 6 — dépôts / retraits : les deals de type « balance » ne
-            # sont pas des trades (position_id = 0). Ils alimentent le
-            # journal des mouvements de capital, en lecture seule, au lieu
-            # d'être groupés sous une fausse « position 0 ».
-            balance_type = getattr(api, "DEAL_TYPE_BALANCE", 2)
-            seen_movements: set = set()
-            for deal in deals:
-                if getattr(deal, "type", None) == balance_type:
-                    self._record_balance_deal(db, deal, seen_movements)
-                    continue
-                pid = deal.position_id
-                group = positions.setdefault(pid, {"ins": [], "outs": []})
-                if deal.entry == api.DEAL_ENTRY_IN:
-                    group["ins"].append(deal)
-                elif deal.entry == api.DEAL_ENTRY_OUT:
-                    group["outs"].append(deal)
 
-            for pid, group in positions.items():
-                ins = group["ins"]
-                outs = group["outs"]
+        positions: dict = {}
+        # Les deals de type « balance » ne sont pas des trades : ils
+        # alimentent le journal des mouvements de capital (dépôts/retraits).
+        balance_type = getattr(api, "DEAL_TYPE_BALANCE", 2)
+        seen_movements: set = set()
+        for deal in deals:
+            if getattr(deal, "type", None) == balance_type:
+                if self._record_balance_deal(db, deal, seen_movements):
+                    changed = True
+                continue
+            self._add_deal(api, positions.setdefault(deal.position_id, {"ins": [], "outs": []}), deal)
 
-                if pid in open_tickets:
-                    # Position toujours ouverte (clôture partielle) : la
-                    # Phase A vient déjà de mettre à jour ses champs
-                    # dynamiques à partir du P&L flottant courant.
-                    continue
+        # Rattrapage : un trade resté « ouvert » en base alors que le courtier
+        # ne le liste plus parmi les positions ouvertes a été clôturé hors de
+        # la fenêtre ci-dessus (app fermée, clôture pendant une coupure…).
+        # Sans ce filet il restait « ouvert » indéfiniment. On ne touche à
+        # rien tant que le courtier ne fournit pas de deal de sortie.
+        stale_open = [
+            t.ticket for t in db.query(Trade).filter(
+                Trade.account_id == self._login,
+                Trade.source == "mt5",
+                Trade.is_open.is_(True),
+            ).all() if t.ticket not in open_tickets
+        ]
+        for pid in stale_open:
+            if positions.get(pid, {}).get("outs"):
+                continue
+            full = self._position_deals(api, pid)
+            if full["outs"]:
+                positions[pid] = full
 
-                if not outs:
-                    # Deal(s) d'entrée seuls sans sortie : ne devrait pas
-                    # arriver (une position sans sortie devrait figurer
-                    # dans open_tickets) — on ignore par sécurité plutôt
-                    # que de créer un trade incomplet.
-                    continue
+        for pid, group in positions.items():
+            ins, outs = group["ins"], group["outs"]
 
-                existing = db.query(Trade).filter(
-                    Trade.account_id == self._login,
-                    Trade.ticket == pid,
-                ).first()
+            if pid in open_tickets:
+                # Position toujours ouverte (clôture partielle) : la Phase A
+                # a déjà mis à jour ses champs dynamiques.
+                continue
+            if not outs:
+                # Entrée seule : position ouverte non listée (ou deal non
+                # trade). On ignore plutôt que de créer un trade incomplet.
+                continue
 
-                if existing is not None and existing.source != "mt5":
-                    # Trade saisi / importé : la synchro ne le modifie jamais.
-                    continue
+            existing = db.query(Trade).filter(
+                Trade.account_id == self._login,
+                Trade.ticket == pid,
+            ).first()
+            if existing is not None and existing.source != "mt5":
+                continue  # Trade saisi / importé : jamais modifié par la synchro.
 
-                if not ins and not existing:
-                    # Ni deal d'entrée dans le lot, ni trade déjà en base :
-                    # impossible de reconstituer l'ouverture. On log et on
-                    # ignore ce ticket plutôt que d'inventer des données.
-                    logger.warning(
-                        "Deal(s) de sortie sans entrée connue pour la position %s — ignoré", pid
-                    )
-                    continue
+            last_out = datetime.fromtimestamp(max(d.time for d in outs), timezone.utc).replace(tzinfo=None)
+            if existing is not None and existing.is_open is False and existing.close_time == last_out:
+                continue  # déjà à jour : le recouvrement de fenêtre ne réécrit rien
 
-                # Correction #2 (agrégation) : on agrège TOUS les deals
-                # d'entrée/sortie de la position, pas seulement le dernier
-                # deal de sortie rencontré — voir services/mt5_aggregation.py
-                # (fonction pure, testée en unitaire).
-                agg = aggregate_closed_position(
-                    ins, outs,
-                    deal_type_buy=api.DEAL_TYPE_BUY,
-                    reason_sl=getattr(api, "DEAL_REASON_SL", None),
-                    reason_tp=getattr(api, "DEAL_REASON_TP", None),
-                    mt5_api=api,
+            # Agrégation sur les deals COMPLETS de la position, pas sur ce que
+            # la fenêtre en contient : une position renforcée à cheval sur la
+            # borne basse aurait sinon un volume / prix d'entrée partiels.
+            full = self._position_deals(api, pid)
+            if full["outs"] and (full["ins"] or existing):
+                ins, outs = full["ins"], full["outs"]
+            if not ins and not existing:
+                logger.warning(
+                    "Deal(s) de sortie sans entrée connue pour la position %s — ignoré", pid
                 )
+                continue
 
-                if ins:
-                    open_price, open_time, volume, direction = (
-                        agg["open_price"], agg["open_time"], agg["volume"], agg["direction"]
-                    )
-                else:
-                    # Correction #6 : le deal d'entrée est hors fenêtre
-                    # incrémentale (position ouverte avant le dernier sync)
-                    # — on réutilise les données déjà connues en base
-                    # plutôt que d'exiger les deux deals dans le même lot.
-                    open_price = existing.open_price
-                    open_time = existing.open_time
-                    volume = existing.volume
-                    direction = existing.direction
+            agg = aggregate_closed_position(
+                ins, outs,
+                deal_type_buy=api.DEAL_TYPE_BUY,
+                reason_sl=getattr(api, "DEAL_REASON_SL", None),
+                reason_tp=getattr(api, "DEAL_REASON_TP", None),
+                mt5_api=api,
+            )
 
-                close_price, close_time = agg["close_price"], agg["close_time"]
-                profit, commission, swap = agg["profit"], agg["commission"], agg["swap"]
-                pips = price_to_pips(close_price - open_price, outs[0].symbol, api)
-                exit_reason = agg["exit_reason"]
+            if ins:
+                open_price, open_time, volume, direction = (
+                    agg["open_price"], agg["open_time"], agg["volume"], agg["direction"]
+                )
+            else:
+                # Entrée introuvable chez le courtier : on garde ce que la base connaît.
+                open_price = existing.open_price
+                open_time = existing.open_time
+                volume = existing.volume
+                direction = existing.direction
 
-                if existing:
-                    existing.close_price = close_price
-                    existing.close_time = close_time
-                    existing.profit = profit
-                    existing.commission = commission
-                    existing.swap = swap
-                    existing.pips = pips
-                    existing.volume = volume
-                    existing.is_open = False
-                    if existing.margin is None:
-                        existing.margin = self._calc_margin(api, outs[0].symbol, direction, volume, open_price)
-                    if pid in initial_stops and not existing.initial_sl:
-                        existing.initial_sl = initial_stops[pid]
-                        existing.sl = initial_stops[pid]
-                    if exit_reason:
-                        existing.exit_reason = exit_reason
-                    # Champs "journal" jamais touchés ici (notes, tags...).
-                else:
-                    trade = Trade(
-                        ticket=pid,
-                        account_id=self._login,
-                        symbol=outs[0].symbol,
-                        direction=direction,
-                        volume=volume,
-                        open_price=open_price,
-                        close_price=close_price,
-                        open_time=open_time,
-                        close_time=close_time,
-                        sl=initial_stops.get(pid),
-                        initial_sl=initial_stops.get(pid),
-                        profit=profit,
-                        commission=commission,
-                        swap=swap,
-                        pips=pips,
-                        comment=outs[-1].comment,
-                        exit_reason=exit_reason,
-                        margin=self._calc_margin(api, outs[0].symbol, direction, volume, open_price),
-                        is_open=False,
-                    )
-                    db.add(trade)
-                    count += 1
+            close_price, close_time = agg["close_price"], agg["close_time"]
+            profit, commission, swap = agg["profit"], agg["commission"], agg["swap"]
+            pips = price_to_pips(close_price - open_price, outs[0].symbol, api)
+            exit_reason = agg["exit_reason"]
+            initial_stop = self._initial_stop(api, pid)
 
-        # Mise à jour de `last_sync` en fin des DEUX phases (utilisé aussi
-        # par la fenêtre incrémentale de la prochaine synchro — correction
-        # #6).
+            if existing:
+                if existing.is_open:
+                    count += 1  # trade nouvellement clôturé
+                existing.close_price = close_price
+                existing.close_time = close_time
+                existing.profit = profit
+                existing.commission = commission
+                existing.swap = swap
+                existing.pips = pips
+                existing.volume = volume
+                existing.is_open = False
+                if existing.margin is None:
+                    existing.margin = self._calc_margin(api, outs[0].symbol, direction, volume, open_price)
+                if initial_stop and not existing.initial_sl:
+                    existing.initial_sl = initial_stop
+                    existing.sl = initial_stop
+                if exit_reason:
+                    existing.exit_reason = exit_reason
+                # Champs « journal » (notes, tags…) : jamais touchés ici.
+            else:
+                db.add(Trade(
+                    ticket=pid,
+                    account_id=self._login,
+                    symbol=outs[0].symbol,
+                    direction=direction,
+                    volume=volume,
+                    open_price=open_price,
+                    close_price=close_price,
+                    open_time=open_time,
+                    close_time=close_time,
+                    sl=initial_stop,
+                    initial_sl=initial_stop,
+                    profit=profit,
+                    commission=commission,
+                    swap=swap,
+                    pips=pips,
+                    comment=outs[-1].comment,
+                    exit_reason=exit_reason,
+                    margin=self._calc_margin(api, outs[0].symbol, direction, volume, open_price),
+                    is_open=False,
+                ))
+                count += 1
+            changed = True
+
+        # `last_sync` : repère informatif. La fenêtre recule de SYNC_OVERLAP à
+        # chaque tour, donc ce curseur n'a plus à être exact à la seconde.
         account = db.query(Account).filter(Account.login == self._login).first()
         if account:
-            account.last_sync = to_date_naive
+            account.last_sync = now_naive
 
-        # Phase 6 — flush : les trades ajoutés ci-dessus doivent être visibles
-        # des requêtes qui suivent (autoflush désactivé sur ces sessions).
+        # Les trades ajoutés ci-dessus doivent être visibles des requêtes qui
+        # suivent (autoflush désactivé sur ces sessions).
         db.flush()
         self._backfill_margins(db, api)
         if account:
@@ -674,6 +750,8 @@ class MT5Service:
             equity_service.record_snapshot(db, account, self.get_account_info())
 
         db.commit()
+        if changed:
+            self._data_version += 1
         return count
 
     # ── Phase 6 : marge, calibrage du capital ────────────────────────────
@@ -739,7 +817,7 @@ class MT5Service:
             (account.balance or 0.0) - net_closed - movement_service.movements_sum(db, account.login), 2)
         account.capital_calibrated = True
 
-    def _record_balance_deal(self, db: Session, deal, seen: set) -> None:
+    def _record_balance_deal(self, db: Session, deal, seen: set) -> bool:
         """Enregistre un deal « balance » (dépôt si profit > 0, retrait si
         < 0) dans le journal des mouvements de capital, sans doublon
         (compte + numéro de deal). La fenêtre de synchro étant incrémentale
@@ -750,15 +828,15 @@ class MT5Service:
             amount = round(float(deal.profit), 2)
         except (TypeError, ValueError, AttributeError):
             logger.warning("Deal « balance » illisible ignoré : %r", deal)
-            return
+            return False
         if amount == 0 or ticket in seen:
-            return
+            return False
         seen.add(ticket)
         already = db.query(CapitalMovement.id).filter(
             CapitalMovement.account_id == self._login, CapitalMovement.ticket == ticket
         ).first()
         if already:
-            return
+            return False
         db.add(CapitalMovement(
             account_id=self._login,
             ticket=ticket,
@@ -767,6 +845,7 @@ class MT5Service:
             comment=(getattr(deal, "comment", None) or None),
             source="mt5",
         ))
+        return True
 
     def _sync_account(self, db: Session) -> None:
 
