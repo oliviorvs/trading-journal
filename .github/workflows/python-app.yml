@@ -1,39 +1,181 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
-name: Python application
+name: Build & Release
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ]          # ex: v1.2.0 -> déclenche la release avec installeur
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  build:
-
+  # ------------------------------------------------------------------
+  # 1. Test de la syntaxe Python
+  # ------------------------------------------------------------------
+  syntax:
+    name: Test syntaxe Python
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
-      with:
-        python-version: "3.10"
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 pytest
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Test with pytest
-      run: |
-        pytest
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Compilation de tous les fichiers .py (erreurs de syntaxe)
+        run: python -m compileall -q backend launcher.py
+
+      - name: Flake8 (erreurs de syntaxe / noms non définis)
+        run: |
+          pip install flake8
+          # Bloquant : erreurs de syntaxe et noms indéfinis
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Informatif seulement (n'échoue jamais)
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+  # ------------------------------------------------------------------
+  # 2. Création du build (TradingJournal.exe via PyInstaller)
+  #    Windows obligatoire : pywebview (WinForms) et MetaTrader5 sont Windows-only.
+  # ------------------------------------------------------------------
+  build:
+    name: Build TradingJournal.exe
+    needs: syntax
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            requirements-build.txt
+
+      - name: Déterminer la version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          } else {
+            $v = "0.0.0"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version : $v"
+
+      - name: Injecter la version dans version_info.txt
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}"
+          $parts = ($v -split '[^0-9]')[0..2] | Where-Object { $_ -ne '' }
+          while ($parts.Count -lt 3) { $parts += '0' }
+          $tuple = ($parts -join ', ') + ', 0'
+          $content = Get-Content version_info.txt -Raw
+          $content = $content -replace 'filevers=\([^)]*\)', "filevers=($tuple)"
+          $content = $content -replace 'prodvers=\([^)]*\)', "prodvers=($tuple)"
+          $content = $content -replace "StringStruct\('FileVersion', '[^']*'\)", "StringStruct('FileVersion', '$v')"
+          $content = $content -replace "StringStruct\('ProductVersion', '[^']*'\)", "StringStruct('ProductVersion', '$v')"
+          Set-Content version_info.txt $content -Encoding UTF8
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+          python -m pip install -r requirements-build.txt
+
+      - name: Compilation PyInstaller
+        run: python -m PyInstaller TradingJournal.spec
+
+      - name: Vérifier que l'exe existe
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/TradingJournal.exe)) { throw "dist/TradingJournal.exe introuvable" }
+          Get-Item dist/TradingJournal.exe | Select-Object Name, Length
+
+      - name: Upload de l'exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: TradingJournal-exe
+          path: dist/TradingJournal.exe
+          if-no-files-found: error
+          retention-days: 14
+
+  # ------------------------------------------------------------------
+  # 3. Création de l'installeur de production + release GitHub
+  #    Uniquement sur un tag vX.Y.Z
+  # ------------------------------------------------------------------
+  release:
+    name: Installeur & Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    permissions:
+      contents: write       # nécessaire pour créer la release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Télécharger l'exe compilé
+        uses: actions/download-artifact@v4
+        with:
+          name: TradingJournal-exe
+          path: dist
+
+      - name: Installer NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Injecter la version dans installer.nsi
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME.TrimStart('v')
+          $parts = ($v -split '[^0-9]')[0..2] | Where-Object { $_ -ne '' }
+          while ($parts.Count -lt 3) { $parts += '0' }
+          $quad = ($parts -join '.') + '.0'
+          $content = Get-Content installer/installer.nsi -Raw
+          $content = $content -replace 'VIProductVersion "[^"]*"', "VIProductVersion `"$quad`""
+          $content = $content -replace '("FileVersion" )"[^"]*"', "`$1`"$v`""
+          $content = $content -replace '("DisplayVersion" )"[^"]*"', "`$1`"$v`""
+          Set-Content installer/installer.nsi $content -Encoding UTF8
+
+      - name: Compiler l'installeur
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist_installer | Out-Null
+          makensis installer/installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis a échoué" }
+
+      - name: Renommer avec la version + checksum SHA256
+        shell: pwsh
+        run: |
+          $v = $env:GITHUB_REF_NAME
+          $src = "dist_installer/MLxPhantomJournal_Setup.exe"
+          $dst = "dist_installer/MLxPhantomJournal_Setup_$v.exe"
+          Move-Item $src $dst
+          $hash = (Get-FileHash $dst -Algorithm SHA256).Hash.ToLower()
+          "$hash  MLxPhantomJournal_Setup_$v.exe" | Out-File "$dst.sha256" -Encoding ascii
+
+      - name: Upload de l'installeur (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MLxPhantomJournal-installer
+          path: dist_installer/*
+          if-no-files-found: error
+
+      - name: Publier la release GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist_installer/MLxPhantomJournal_Setup_*.exe
+            dist_installer/MLxPhantomJournal_Setup_*.exe.sha256
+          generate_release_notes: true
