@@ -56,7 +56,7 @@ Le script :
 
 1. vérifie Python et peut tenter son installation sous Windows ;
 2. installe `backend/requirements.txt` ;
-3. crée ou réutilise la base SQLite dans `db/` ;
+3. crée la base SQLite dans `db/` ;
 4. démarre l'API sur `http://127.0.0.1:8000` ;
 5. sert `frontend/` sur `http://127.0.0.1:5500` ;
 6. ouvre l'interface dans le navigateur.
@@ -204,37 +204,6 @@ Toutes les routes de données sont sous `/api/` et nécessitent une session,
 
 La documentation complète et les schémas sont disponibles dans Swagger sur
 `/docs` lorsque l'API est démarrée.
-
-## Tests
-
-Depuis la racine du projet :
-
-```bat
-python -m pip install -r backend\requirements.txt
-python -m pip install pytest httpx openpyxl
-python -m pytest tests -q
-```
-
-Les tests utilisent des copies temporaires de la base, des logs et des
-uploads ; le dossier `db/` du projet n'est pas modifié. L'authentification est
-désactivée dans les tests et MetaTrader 5 est simulé.
-
-`tests/make_report.py` génère des relevés synthétiques pour tester les
-parseurs. La synchronisation MT5 réelle avec un terminal et les formats
-spécifiques des brokers doivent être vérifiés séparément.
-
-## Données locales et sauvegardes
-
-Les fichiers importants sont :
-
-- `db/trading_journal.db` : données du journal ;
-- `db/.secret_key` : clé de chiffrement des identifiants MT5 ;
-- `backend/uploads/` : captures d'écran et pièces jointes ;
-- `logs/backend.log` : journal de fonctionnement.
-
-Pour sauvegarder ou migrer une installation, arrêter l'application puis
-copier `db/`, `backend/uploads/` et, si nécessaire, `logs/`. Ne pas publier la
-base, la clé ou les pièces jointes dans un dépôt public.
 
 ## Licence
 
